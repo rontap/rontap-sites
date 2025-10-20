@@ -20,6 +20,7 @@ export default function CardShop(props: CardShopProps) {
                               toggle={() => false} selected={false}
                               bg={el.self.bg || "#666"}
                               kind={String(el.self.use)}
+                              standablone={true}
                               faction={el.self.factions}>
                             {el.self.description}
                         </Card>

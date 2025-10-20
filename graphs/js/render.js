@@ -128,13 +128,18 @@ function render(type, e) {//main rendering funcion
     graph.nodes.forEach((val, key) => {
 
         ctx.beginPath();
+        ctx.lineWidth = 1;
+
+        ctx.strokeStyle = "black";
         //NODE COLOR THINGS
         mainColor = renderSelectedColor(val);
 
         if (FORCE_LSA) {
             mainColor = LSA_xdiff[val.id]
-        }
-        if (ms.selected.has(val.id)) {//element is selected
+        } else if (val.id === 0) { // highlight node
+            ctx.lineWidth = 6;
+            ctx.strokeStyle = MAT_COLORS['orange-800'];
+        } else if (ms.selected.has(val.id)) {//element is selected
             ctx.lineWidth = 6;
             ctx.strokeStyle = MAT_COLORS['orange-800'];
             ctx.fillStyle = '#eeeeee';
@@ -155,6 +160,25 @@ function render(type, e) {//main rendering funcion
             ctx.fillStyle = mainColor;
             ctx.strokeStyle = "black";
             ctx.lineWidth = 1;
+        }
+
+        if (val._rest.Type) {
+            if (val._rest.Type === "cd") {
+                ctx.fillStyle = MAT_COLORS['green-500'];
+
+            }
+            if (val._rest.Type === "cp") {
+
+                ctx.fillStyle = MAT_COLORS['blue-500'];
+            }
+            if (val._rest.Type === "f") {
+                ctx.fillStyle = MAT_COLORS['brown-400'];
+            }
+            if (val._rest.Type === "d") {
+                ctx.fillStyle = MAT_COLORS['orange-600'];
+                ctx.strokeStyle = MAT_COLORS['orange-500'];
+                ctx.lineWidth = 10;
+            }
         }
 
         if (e.shiftKey && SELECTING != false && SELECT_TO != false) {
@@ -280,6 +304,16 @@ function render(type, e) {//main rendering funcion
 
                 }
 
+            }
+
+
+            let weight = val.edges.get(edgeId);
+            if (weight.includes("COLOR:")) {
+                const col = weight.split(':')[1];
+                const tour = col % MAT_COLORS.swatches.length;
+                ctxbg.lineWidth = 2;
+                console.log(MAT_COLORS.swatches[tour],weight)
+                ctxbg.strokeStyle = MAT_COLORS[MAT_COLORS.swatches[tour] + '-500'];
             }
 
 

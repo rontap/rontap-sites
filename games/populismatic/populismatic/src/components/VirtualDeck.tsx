@@ -155,7 +155,7 @@ export function Deck({initialCards, expand, onClickPowerup, setPowerup, setSelec
                     expand(card.faction)
                 }}>
                     <>
-                        <b>Political Party</b>
+                        <b>Steal policy from this party</b>
                         <br/>
                         {card.name}</>
                 </Card>

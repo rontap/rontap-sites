@@ -51,7 +51,7 @@ export const Consumables: Record<ConsumableTypes, Consumable> = {
         description: "Draw 3 cards (without changing your hand size)",
         onAction: (cell, _board) => {
         },
-        use : Use.EXHAUST,
+        use: Use.EXHAUST,
         cost: 1,
         factions: [Faction.CENTR, Faction.LIB, Faction.WILDCARD],
     }),
@@ -62,7 +62,7 @@ export const Consumables: Record<ConsumableTypes, Consumable> = {
         onAction: (cell, _board) => {
         },
         cost: 1,
-        use : Use.SINGLE,
+        use: Use.SINGLE,
         factions: [Faction.COMM, Faction.SOC, Faction.NAT]
     }),
     [ConsumableTypes.Cheat]: new Consumable({
@@ -72,7 +72,7 @@ export const Consumables: Record<ConsumableTypes, Consumable> = {
         onAction: (cell, _board) => {
         },
         cost: 4,
-        use : Use.SINGLE,
+        use: Use.SINGLE,
         factions: [Faction.FASH, Faction.COMM, Faction.NAT]
     }),
     [ConsumableTypes.Reroll]: new Consumable({
@@ -80,10 +80,10 @@ export const Consumables: Record<ConsumableTypes, Consumable> = {
         icon: "🔀",
         description: "Reshuffle Deck",
         onAction: (cell, board) => {
-           // TODO reroll functionality
+            // TODO reroll functionality
         },
         cost: 0,
-        use : Use.FOREVER,
+        use: Use.FOREVER,
         factions: [Faction.CENTR, Faction.CON, Faction.WILDCARD, Faction.SOC, Faction.COMM]
     }),
     [ConsumableTypes.HQ]: new Consumable({
@@ -97,7 +97,7 @@ export const Consumables: Record<ConsumableTypes, Consumable> = {
             return;
         },
         cost: 3,
-        use : Use.SINGLE,
+        use: Use.SINGLE,
         boardInteraction: true,
         bg: consumableBgs.dyn,
         factions: [Faction.CENTR, Faction.LIB, Faction.SOC, Faction.NAT]
@@ -105,25 +105,25 @@ export const Consumables: Record<ConsumableTypes, Consumable> = {
     [ConsumableTypes.UnityLeft]: new Consumable({
         name: "Leftist Unity",
         icon: "❤️",
-        description: "Leftist Unity",
+        description: "Expand {GREEN} {COMM} {SOC}",
         onAction: (cell, board, update, next) => {
             console.log('>>');
             board.doPopulism([Faction.GREEN, Faction.SOC, Faction.COMM], update, next).then();
         },
         cost: 5,
-        use : Use.EXHAUST,
+        use: Use.EXHAUST,
         bg: "linear-gradient(in srgb to right, var(--faction-COMM) 5%, var(--faction-SOC) 50%, var(--faction-GREEN) 95%)",
         factions: FactionLEFT
     }),
     [ConsumableTypes.UnityRight]: new Consumable({
         name: "Righwing Unity",
         icon: "💙",
-        description: "Righwing Unity",
+        description: "Expand {FASH} {CON} {WILDCARD}",
         onAction: (cell, board, update, next) => {
             board.doPopulism([Faction.FASH, Faction.CON, Faction.WILDCARD], update, next).then();
         },
         cost: 5,
-        use : Use.EXHAUST,
+        use: Use.EXHAUST,
         bg: "linear-gradient(in srgb to right, var(--faction-FASH) 5%, var(--faction-CON) 50%, var(--faction-WILDCARD) 95%)",
 
         factions: FactionRIGHT
@@ -131,24 +131,24 @@ export const Consumables: Record<ConsumableTypes, Consumable> = {
     [ConsumableTypes.UnityCenterLEFTRIGHT]: new Consumable({
         name: "Centrist Unity",
         icon: "💗",
-        description: "Centrist Unity",
+        description: "Expand {NAT} {CENTR} {LIB}",
         onAction: (cell, board, update, next) => {
             board.doPopulism([Faction.NAT, Faction.CENTR, Faction.LIB], update, next).then();
         },
         bg: "linear-gradient(in srgb to right, var(--faction-NAT) 5%, var(--faction-CENTR) 50%, var(--faction-LIB) 95%)",
         cost: 5,
-        use : Use.EXHAUST,
+        use: Use.EXHAUST,
         factions: FactionC_RIGHT_LEFT
     }),
     [ConsumableTypes.UnityAuth]: new Consumable({
         name: "Auth. Unity",
         icon: "🖤",
-        description: "Authoritarian Unity",
+        description: "Expand {COMM} {NAT} {FASH}",
         onAction: (cell, board, update, next) => {
             board.doPopulism([Faction.COMM, Faction.NAT, Faction.FASH], update, next).then();
         },
         cost: 5,
-        use : Use.EXHAUST,
+        use: Use.EXHAUST,
         bg: "linear-gradient(in srgb to right, var(--faction-COMM) 5%, var(--faction-NAT) 50%, var(--faction-FASH) 95%)",
 
         factions: FactionAUTH
@@ -156,11 +156,11 @@ export const Consumables: Record<ConsumableTypes, Consumable> = {
     [ConsumableTypes.UnityCenterAUTHLIB]: new Consumable({
         name: "Centrist Unity",
         icon: "💓",
-        description: "Centrist Unity",
+        description: "Expand {SOC} {CENTR} {CON}",
         onAction: (cell, board, update, next) => {
             board.doPopulism([Faction.SOC, Faction.CENTR, Faction.CON], update, next).then();
         },
-        use : Use.EXHAUST,
+        use: Use.EXHAUST,
         cost: 5,
         bg: "linear-gradient(in srgb to right, var(--faction-SOC) 5%, var(--faction-CENTR) 50%, var(--faction-CON) 95%)",
         factions: FactionC_AUTH_LIB
@@ -168,12 +168,12 @@ export const Consumables: Record<ConsumableTypes, Consumable> = {
     [ConsumableTypes.UnityLib]: new Consumable({
         name: "Liberal Unity",
         icon: "💛",
-        description: "Liberal Unity",
+        description: "Expand {GREEN} {LIB} {WILDCARD}",
         onAction: (cell, board, update, next) => {
             board.doPopulism([Faction.GREEN, Faction.LIB, Faction.WILDCARD], update, next).then();
         },
         cost: 5,
-        use : Use.EXHAUST,
+        use: Use.EXHAUST,
         bg: "linear-gradient(in srgb to right, var(--faction-GREEN) 5%, var(--faction-LIB) 50%, var(--faction-WILDCARD) 95%)",
 
         factions: FactionLIB
@@ -188,7 +188,7 @@ export const Consumables: Record<ConsumableTypes, Consumable> = {
         },
         boardInteraction: true,
         cost: 3,
-        use : Use.EXHAUST,
+        use: Use.EXHAUST,
         factions: FactionLEFT,
         bg: consumableBgs.interact
     }),
@@ -201,7 +201,7 @@ export const Consumables: Record<ConsumableTypes, Consumable> = {
         },
         boardInteraction: true,
         cost: 3,
-        use : Use.EXHAUST,
+        use: Use.EXHAUST,
         factions: [Faction.NAT, Faction.FASH, Faction.CON],
         bg: consumableBgs.interact
     }),
@@ -218,7 +218,7 @@ export const Consumables: Record<ConsumableTypes, Consumable> = {
                 true,
             cost: 2,
             factions: FactionALL,
-            use : Use.EXHAUST,
+            use: Use.EXHAUST,
             bg: consumableBgs.interact
         }),
 
@@ -232,7 +232,7 @@ export const Consumables: Record<ConsumableTypes, Consumable> = {
             },
             boardInteraction: true,
             cost: 6,
-            use : Use.SINGLE,
+            use: Use.SINGLE,
             factions: [Faction.SOC, Faction.CENTR, Faction.GREEN],
             bg: consumableBgs.dyn
         }),
@@ -259,7 +259,7 @@ export const Consumables: Record<ConsumableTypes, Consumable> = {
             },
             boardInteraction: false,
             cost: 5,
-            use : Use.SINGLE,
+            use: Use.SINGLE,
             factions: [Faction.SOC, Faction.FASH, Faction.CON, Faction.GREEN],
             bg: consumableBgs.dyn
         }),
@@ -274,7 +274,7 @@ export const Consumables: Record<ConsumableTypes, Consumable> = {
             },
             boardInteraction: true,
             cost: 1,
-            use : Use.EXHAUST,
+            use: Use.EXHAUST,
             factions: [Faction.CON, Faction.FASH, Faction.FAITH],
             bg: consumableBgs.interact
         }),
@@ -288,7 +288,7 @@ export const Consumables: Record<ConsumableTypes, Consumable> = {
             },
             boardInteraction: true,
             cost: 1,
-            use : Use.EXHAUST,
+            use: Use.EXHAUST,
             factions: [Faction.SOC, Faction.CENTR, Faction.CON],
             bg: consumableBgs.interact
         }),
@@ -302,7 +302,7 @@ export const Consumables: Record<ConsumableTypes, Consumable> = {
             },
             boardInteraction: false,
             cost: 0,
-            use : Use.SINGLE,
+            use: Use.SINGLE,
             factions: [Faction.CENTR, Faction.LIB, Faction.WILDCARD],
         }),
     [ConsumableTypes.Track]:
@@ -318,7 +318,7 @@ export const Consumables: Record<ConsumableTypes, Consumable> = {
             },
             boardInteraction: true,
             bg: consumableBgs.interact,
-            use : Use.EXHAUST,
+            use: Use.EXHAUST,
             factions: [Faction.NAT, Faction.LIB, Faction.COMM, Faction.WILDCARD]
         }),
     [ConsumableTypes.Intimidate]:
@@ -332,7 +332,7 @@ export const Consumables: Record<ConsumableTypes, Consumable> = {
             },
             boardInteraction: true,
             factions: FactionAUTH,
-            use : Use.EXHAUST,
+            use: Use.EXHAUST,
             bg: consumableBgs.interact
         }),
 // new Consumable({

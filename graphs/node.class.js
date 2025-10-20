@@ -1,11 +1,12 @@
 class Node {
-    constructor(id,name,edges) {
+    constructor(id,name,edges,_rest) {
         this.id = id;
         this.name = name   || id;
         this.edges = new Map(edges) || new Map(); //Edges is a MAP : Id => Weight
         this.subgraph = null;
         this.type = "Node";
         this.weight=10;
+        this._rest = _rest;
 
     }
 

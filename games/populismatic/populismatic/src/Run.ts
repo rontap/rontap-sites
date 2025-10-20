@@ -65,6 +65,7 @@ export class Run {
     }
 
     acquirePowerup(powerup: Powerup<PowerupCtr>) {
+        console.log("power", powerup)
         if (this.canAcquirePowerup) {
             this.powerups.push(powerup);
             this.triggerUI()
@@ -83,6 +84,7 @@ export class Run {
     }
 
     get canAcquirePowerup() {
+        return true // todo: hmm
         return this.powerups.length < this.modifiers.powerups.max
     }
 
