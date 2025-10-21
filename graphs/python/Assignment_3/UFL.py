@@ -185,15 +185,14 @@ class LagrangianHeuristic:
             # If not assigned/open, perform repair
             if not is_assigned_and_open:  # change Use check flag for repair condition
                 # find cheapest open facility
-                open_facilities = np.where(shouldOpenFac)[0]
+                open_facilities = LagrangianHeuristic.openFacilities(shouldOpenFac)
                 if len(open_facilities) == 0:
                     # open cheapest facility for this customer
                     # The cost is cost[customer j, facility i]
-                    i_best = np.argmin(
-                        self.instance.fixed + self.instance.cost[
-                            j, :])  # change Correct cost indexing for best facility
+                    cost = self.instance.fixed + self.instance.cost[j, :]
+                    i_best = np.argmin(cost)  # change Correct cost indexing for best facility
                     shouldOpenFac[i_best] = True
-                    open_facilities = np.where(shouldOpenFac)[0]
+                    open_facilities = LagrangianHeuristic.openFacilities(shouldOpenFac)
                 # find the cheapest open facility for customer j
                 # cost[customer j, facility set]
                 i_best = open_facilities[
@@ -204,7 +203,11 @@ class LagrangianHeuristic:
 
         return UFL_Solution(shouldOpenFac, sourcedFrac, self.instance)
 
-    def updateMultipliers(self, labda_old, lagr_solution):
+    @staticmethod
+    def openFacilities(shouldOpenFac):
+        return [j for j, is_open in enumerate(shouldOpenFac) if is_open]
+
+    def updateMultipliers(self, lambdaOg, lagr_solution):
         """
         Method that, given the previous Lagrangian multipliers and Lagrangian Solution
         updates and returns a new array of Lagrangian multipliers
@@ -244,15 +247,15 @@ class LagrangianHeuristic:
 
         # newlambdas
         sums = np.sum(lagr_solution.sourcedFrac, axis=1)  # For each customer i: ∑ⱼ xᵢⱼ
-        lambdaNext = np.copy(labda_old)
+        lambdaNext = np.copy(lambdaOg)
 
         for i in range(self.instance.n_markets):
             if sums[i] < 1.0:
                 # Under-assigned: increase λᵢ
-                lambdaNext[i] = max(0, labda_old[i] + stepSize * subgradient[i])
+                lambdaNext[i] = max(0, lambdaOg[i] + stepSize * subgradient[i])
             elif sums[i] > 1.0:
                 # Over-assigned: decrease λᵢ
-                lambdaNext[i] = max(0, labda_old[i] + stepSize * subgradient[i])
+                lambdaNext[i] = max(0, lambdaOg[i] + stepSize * subgradient[i])
             # else: sums[i] == 1.0, keep λᵢ the same
 
         return lambdaNext
