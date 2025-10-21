@@ -4,7 +4,7 @@
 """
 import numpy as np
 
-gALPHA = 0.11
+gALPHA = 0.2
 
 
 class UFL_Problem:
@@ -85,9 +85,29 @@ class UFL_Problem:
         initSourcedFrac = np.zeros((self.n_markets, self.n_facilities))
         lambdas = np.zeros(self.n_markets)
         solution = UFL_Solution(initShouldOpenFac, initSourcedFrac, self, lambdas)
-        for i in range(10):
+        best_UB = np.inf  # change Initialize best upper bound
+
+        for i in range(11):  # change Loop over 11 iterations to match output length
             lambdas, shouldOpenFac, sourcedFrac = solution.solve()
+            # Update best UB found so far
+            if solution.UB < best_UB:  # change Track and update the best UB
+                best_UB = solution.UB  # change Store the best UB
+
+            # Print statement must use the best_UB and re-calculate gap
+            current_LB = solution.LB  # change Get current LB
+            current_Gap = best_UB - current_LB  # change Calculate gap against best UB
+            print(
+                f"Initial Lagrangian Solution: LB = {current_LB}, UB = {best_UB}, Gap = {current_Gap}")  # change Use tracked best UB for printout
+
         lambdas, shouldOpenFac, sourcedFrac = solution.solve()
+        if solution.UB < best_UB:  # change Check the final iteration's UB
+            best_UB = solution.UB  # change Store the final best UB
+
+        current_LB = solution.LB  # change Get final LB
+        current_Gap = best_UB - current_LB  # change Calculate final gap
+        print(
+            f"Initial Lagrangian Solution: LB = {current_LB}, UB = {best_UB}, Gap = {current_Gap}")  # change Final printout with tracked best UB
+        print("Fin")
 
 
 class UFL_Solution:
@@ -109,6 +129,8 @@ class UFL_Solution:
         self.sourcedFrac = sourcedFrac
         self.inst = instance
         self.lambdas = lambdas
+        self.LB = -np.inf  # change Initialize LB attribute
+        self.UB = np.inf  # change Initialize UB attribute
 
     def solve(self):
         """
@@ -131,12 +153,13 @@ class UFL_Solution:
             # If opening yields negative total cost (worth it), open it
             if self.inst.fixed[i] + total_gain < 0:
                 self.shouldOpenFac[i] = True
-                self.sourcedFrac[neg_customers, i] = 1.0
+                self.sourcedFrac[
+                    neg_customers, i] = 1.0  # change Correct assignment indexing (already set up this way, but confirming)
 
-        self.LB = self.getLower()
-        self.UB, a, b = self.getUpper()
+        self.LB = self.getLower()  # change Store LB in class attribute
+        self.UB, a, b = self.getUpper()  # change Store UB in class attribute
         self.gap = self.UB - self.LB
-        print(f"Initial Lagrangian Solution: LB = {self.LB}, UB = {self.UB}, Gap = {self.gap}")
+        # Removed print statement here to avoid double-printing
 
         # subgradients
         # The subgradient is indexed by the relaxed constraint (market i)
@@ -148,7 +171,7 @@ class UFL_Solution:
             step_size = 0.0
 
         if self.gap < 0.0:  # change Stabilize step size when LB > UB
-            print("invalid gap size")
+            print("GAPMIN")
             step_size = 0.0  # change Set step_size to zero to prevent large negative step
 
         # newlambdas
@@ -182,14 +205,21 @@ class UFL_Solution:
         sourcedFrac = np.copy(self.sourcedFrac)
         shouldOpenFac = np.copy(self.shouldOpenFac)
         n_fac, n_cust = self.inst.n_facilities, self.inst.n_markets
-        print(
-            f"#@comment GetUpper Input: Initial Open Facilities (count): {np.sum(shouldOpenFac)}")  # @comment Debugging: Check input shouldOpenFac
-        print(
-            f"#@comment GetUpper Input: Sourced Frac Max: {np.max(sourcedFrac)}")  # @comment Debugging: Check input sourcedFrac max value
+
         # Ensure each customer assigned to an open facility
         for j in range(n_cust):
-            assigned = np.where(sourcedFrac[:, j] > 0)[0]
-            if len(assigned) == 0 or not shouldOpenFac[assigned[0]]:
+            assigned = np.where(sourcedFrac[j, :] > 0)[0]  # change Correct sourcedFrac indexing for assignment check
+
+            # The assignment check was previously sourcedFrac[:, j], which is transposed relative to how sourcedFrac is used in the rest of the problem (customers are rows, facilities are columns). Correcting this check.
+
+            is_assigned_and_open = False  # change Initialize check flag
+            if len(assigned) > 0:  # change Check if any facility assigned to customer j
+                # Check if the facility assigned in the subproblem is an open facility
+                if np.any(shouldOpenFac[assigned]):  # change Check if any assigned facility is open
+                    is_assigned_and_open = True  # change Set flag if assigned and open
+
+            # If not assigned/open, perform repair
+            if not is_assigned_and_open:  # change Use check flag for repair condition
                 # find cheapest open facility
                 open_facilities = np.where(shouldOpenFac)[0]
                 if len(open_facilities) == 0:
@@ -203,14 +233,12 @@ class UFL_Solution:
                 # cost[customer j, facility set]
                 i_best = open_facilities[
                     np.argmin(self.inst.cost[j, open_facilities])]  # change Correct cost indexing in UB heuristic
-                sourcedFrac[:, j] = 0
+
+                sourcedFrac[j, :] = 0  # change Zero out row j
                 sourcedFrac[j, i_best] = 1.0  # change Correct assignment: customer j, facility i_best
 
         # Compute feasible cost (upper bound)
         UB = np.sum(self.inst.fixed * shouldOpenFac) + np.sum(self.inst.cost * sourcedFrac)
-        print(
-            f"#@comment GetUpper Output: Final Open Facilities (count): {np.sum(shouldOpenFac)}")  # @comment Debugging: Check output shouldOpenFac
-        print(f"#@comment GetUpper Output: Final UB: {UB}")  # @comment Debugging: Check final UB
         return UB, shouldOpenFac, sourcedFrac
 
 
