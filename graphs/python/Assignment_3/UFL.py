@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 from kernprof import no_op
 
-gALPHA = 0.25  # change Using 0.5 as a robust alpha value
+gALPHA = .8  # change Using 0.5 as a robust alpha value
 
 
 class UFL_Problem:
@@ -71,9 +71,9 @@ class UFL_Problem:
         # The loop must run once to establish a finite best_UB before that value is used in solve()
         # We will use a flag to handle the first iteration
 
-        for i in range(500):  # change Loop for 12 iterations
-            if i % 50 == 0 and i > 0:
-                gALPHA = gALPHA / 1.2
+        for i in range(250):  # change Loop for 12 iterations
+            if i % 25 == 0 and i > 0:
+                gALPHA = gALPHA / 1.8
 
                 # gALPHA = gALPHA - 0.001
             # --- Establish Best UB for the FIRST Iteration ONLY ---
