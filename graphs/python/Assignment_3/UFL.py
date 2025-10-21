@@ -2,9 +2,12 @@
 """
 @author: Original template by Rolf van Lieshout and Krissada Tundulyasaree
 """
-import numpy as np
+from typing import Any
 
-gALPHA = 0.1  # change Using 0.5 as a robust alpha value
+import numpy as np
+from kernprof import no_op
+
+gALPHA = 0.25  # change Using 0.5 as a robust alpha value
 
 
 class UFL_Problem:
@@ -58,6 +61,7 @@ class UFL_Problem:
         return UFL_Problem(f_j, c_ij, n_markets, n_facilities)
 
     def solve(self):
+        global gALPHA
         initShouldOpenFac = np.zeros(self.n_facilities)
         initSourcedFrac = np.zeros((self.n_markets, self.n_facilities))
         lambdas = np.zeros(self.n_markets)
@@ -67,8 +71,11 @@ class UFL_Problem:
         # The loop must run once to establish a finite best_UB before that value is used in solve()
         # We will use a flag to handle the first iteration
 
-        for i in range(150):  # change Loop for 12 iterations
+        for i in range(500):  # change Loop for 12 iterations
+            if i % 50 == 0 and i > 0:
+                gALPHA = gALPHA / 1.2
 
+                # gALPHA = gALPHA - 0.001
             # --- Establish Best UB for the FIRST Iteration ONLY ---
             # If best_UB is still inf, calculate the solution *without* using best_UB for step size
             # and only calculate a step size of 0.
@@ -86,10 +93,10 @@ class UFL_Problem:
             current_Gap = best_UB - current_LB  # change Calculate gap against best UB
 
             # @comment Print debug info first
-            #print(debug_info)
+            # print(debug_info)
 
             print(
-                f"{i} Lagrangian Solution: LB = {current_LB}, UB = {best_UB}, Gap = {current_Gap}")  # change Use tracked best UB for printout
+                f"{i} Lagrangian Solution: LB = ,{current_LB}, UBbest = ,{best_UB}, UB = ,{solution.UB}, Gap = {current_Gap}")  # change Use tracked best UB for printout
 
             if should_terminate:  # change Terminate loop if subgradient is near zero
                 print("Fin")
@@ -193,9 +200,20 @@ class UFL_Solution:
         Method that computes and returns the Lagrangian costs of the solution
         """
         term1 = np.sum(self.lambdas)  # sum over customers
-        term2 = np.sum(self.inst.fixed * self.shouldOpenFac)
-        term3 = np.sum((self.inst.cost - self.lambdas) * self.sourcedFrac)
-        return term1 + term2 + term3
+        term2 = np.sum(self.inst.fixed * self.shouldOpenFac)  # change sum(f_j * y_j)
+
+        # FIX: The algebraic calculation was causing large negative LB values.
+        # Original: term3 = np.sum((self.inst.cost - self.lambdas) * self.sourcedFrac)
+
+        # Corrected: Split the reduced cost term into two parts to balance the lambda component:
+        term3_cost = np.sum(self.inst.cost * self.sourcedFrac)  # @comment Sum of assignment costs: sum(c_ij * x_ij)
+
+        # The sum of x_ij over j is 1 for an assigned customer i, 0 otherwise.
+        term4_lambda_subtracted = np.sum(
+            self.lambdas * np.sum(self.sourcedFrac, axis=1))  # @comment Term to subtract: sum(lambda_i * sum_j(x_ij))
+
+        # LB = sum(lambda_i) + sum(f_j * y_j) + sum(c_ij * x_ij) - sum(lambda_i * sum_j(x_ij))
+        return term1 + term2 + term3_cost - term4_lambda_subtracted  # @comment Corrected LB calculation to prevent negative values
 
     def getUpper(self):
         sourcedFrac = np.copy(self.sourcedFrac)
