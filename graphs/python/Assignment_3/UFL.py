@@ -4,24 +4,11 @@
 """
 import numpy as np
 
-gALPHA = 0.2
+gALPHA = 0.1  # change Using 0.5 as a robust alpha value
 
 
 class UFL_Problem:
-    """
-    Class that represent a problem instance of the Uncapcitated Facility Location Problem
-
-    Attributes
-    ----------
-    fixed : numpy array
-        the yearly fixed operational costs of all facilities
-    cost : numpy 2-D array (matrix)
-        the yearly transportation cost of delivering all demand from markets to facilities
-    n_markets : int
-        number of all markets.
-    n_facilities : int
-        number of all available locations.
-    """
+    # ... (UFL_Problem and readInstance methods are unchanged) ...
 
     def __init__(self, f, c, n_markets, n_facilities):
 
@@ -37,16 +24,6 @@ class UFL_Problem:
     def readInstance(fileName):
         """
         Read the instance fileName
-
-        Parameters
-        ----------
-        fileName : str
-            instance name in the folder Instance.
-
-        Returns
-        -------
-        UFL Object
-
         """
         # Read filename
         print("read instance")
@@ -87,8 +64,19 @@ class UFL_Problem:
         solution = UFL_Solution(initShouldOpenFac, initSourcedFrac, self, lambdas)
         best_UB = np.inf  # change Initialize best upper bound
 
-        for i in range(11):  # change Loop over 11 iterations to match output length
-            lambdas, shouldOpenFac, sourcedFrac = solution.solve()
+        # The loop must run once to establish a finite best_UB before that value is used in solve()
+        # We will use a flag to handle the first iteration
+
+        for i in range(150):  # change Loop for 12 iterations
+
+            # --- Establish Best UB for the FIRST Iteration ONLY ---
+            # If best_UB is still inf, calculate the solution *without* using best_UB for step size
+            # and only calculate a step size of 0.
+
+            # We must run the subproblem first to get a current LB and UB
+            lambdas, shouldOpenFac, sourcedFrac, should_terminate, debug_info = solution.solve(best_UB,
+                                                                                               i == 0)  # change Pass best_UB and is_first_iteration flag
+
             # Update best UB found so far
             if solution.UB < best_UB:  # change Track and update the best UB
                 best_UB = solution.UB  # change Store the best UB
@@ -96,32 +84,23 @@ class UFL_Problem:
             # Print statement must use the best_UB and re-calculate gap
             current_LB = solution.LB  # change Get current LB
             current_Gap = best_UB - current_LB  # change Calculate gap against best UB
+
+            # @comment Print debug info first
+            #print(debug_info)
+
             print(
-                f"Initial Lagrangian Solution: LB = {current_LB}, UB = {best_UB}, Gap = {current_Gap}")  # change Use tracked best UB for printout
+                f"{i} Lagrangian Solution: LB = {current_LB}, UB = {best_UB}, Gap = {current_Gap}")  # change Use tracked best UB for printout
 
-        lambdas, shouldOpenFac, sourcedFrac = solution.solve()
-        if solution.UB < best_UB:  # change Check the final iteration's UB
-            best_UB = solution.UB  # change Store the final best UB
+            if should_terminate:  # change Terminate loop if subgradient is near zero
+                print("Fin")
+                return
 
-        current_LB = solution.LB  # change Get final LB
-        current_Gap = best_UB - current_LB  # change Calculate final gap
-        print(
-            f"Initial Lagrangian Solution: LB = {current_LB}, UB = {best_UB}, Gap = {current_Gap}")  # change Final printout with tracked best UB
         print("Fin")
 
 
 class UFL_Solution:
     """
     Class that represent a solution to the Uncapcitated Facility Location Problem
-
-    Attributes
-    ----------
-    shouldOpenFac : numpy array
-        binary array indicating whether facilities are open
-    sourcedFrac : numpy 2-D array (matrix)
-        fraction of demand from markets sourced from facilities
-    instance: UFL_Problem
-        the problem instance
     """
 
     def __init__(self, shouldOpenFac, sourcedFrac, instance, lambdas):
@@ -132,13 +111,14 @@ class UFL_Solution:
         self.LB = -np.inf  # change Initialize LB attribute
         self.UB = np.inf  # change Initialize UB attribute
 
-    def solve(self):
+    def solve(self, best_UB, is_first_iteration):  # change Accept best_UB and is_first_iteration flag
         """
         Method that initializes the solution attributes
         """
         # Reset sourcedFrac for this iteration's subproblem
         self.sourcedFrac = np.zeros((self.inst.n_markets, self.inst.n_facilities))  # change Reset sourcedFrac
         self.shouldOpenFac = np.zeros(self.inst.n_facilities)  # change Reset shouldOpenFac
+        should_terminate = False  # change Initialize termination flag
 
         for i in range(self.inst.n_facilities):
             # Reduced cost for assigning customers to facility i
@@ -158,31 +138,47 @@ class UFL_Solution:
 
         self.LB = self.getLower()  # change Store LB in class attribute
         self.UB, a, b = self.getUpper()  # change Store UB in class attribute
-        self.gap = self.UB - self.LB
-        # Removed print statement here to avoid double-printing
+
+        # Calculate stable gap using the BEST UB for the step size (UB* - LB)
+        stable_gap = best_UB - self.LB  # change Calculate stable gap using best_UB
 
         # subgradients
         # The subgradient is indexed by the relaxed constraint (market i)
         subgradient = 1.0 - np.sum(self.sourcedFrac, axis=1)  # change Correct subgradient axis
         norm_g2 = np.dot(subgradient, subgradient)
-        if norm_g2 > 0:
-            step_size = gALPHA * self.gap / norm_g2
-        else:
-            step_size = 0.0
 
-        if self.gap < 0.0:  # change Stabilize step size when LB > UB
-            print("GAPMIN")
-            step_size = 0.0  # change Set step_size to zero to prevent large negative step
+        step_size = 0.0  # change Initialize step_size
+
+        # --- Critical Step Size Logic ---
+
+        # 1. Handle Near-Zero Subgradient (Numerical Stability/Convergence)
+        if norm_g2 > np.finfo(float).eps:  # change Use epsilon check for robust division
+            # 2. Handle First Iteration (where best_UB is inf)
+            if is_first_iteration:  # change If it's the first run, the step size must be zero to prevent inf
+                step_size = 0.0
+            else:
+                # 3. Handle Normal Iteration
+                step_size = gALPHA * stable_gap / norm_g2
+        else:
+            # Subgradient is zero -> Convergence
+            step_size = 0.0
+            should_terminate = True  # change Set flag to terminate if subgradient is near zero
+
+        # 4. Handle UB* Surpassed (Standard Subgradient Rule)
+        if stable_gap < 0.0:  # change Use stable_gap to check for surpassing best known UB
+            step_size = 0.0  # change Set step_size to zero if LB surpasses UB*
 
         # newlambdas
         self.lambdas = np.maximum(0, self.lambdas + step_size * subgradient)
-        return self.lambdas, self.shouldOpenFac, self.sourcedFrac
+
+        # @comment Debugging print statement to see convergence metrics
+        debug_info = f"|--- DEBUG: LB={self.LB:.5f}, UB*={best_UB:.5f}, Gap={stable_gap:.5f}, ||g||^2={norm_g2:.2e}, t^k={step_size:.5e}"  # change Store debug info
+        debug_info = ""
+        return self.lambdas, self.shouldOpenFac, self.sourcedFrac, should_terminate, debug_info  # change Return termination flag and debug info
 
     def isFeasible(self):
         """
         Method that checks whether the solution is feasible
-
-        Returns true if feasible, false otherwise
         """
         return
 
@@ -210,8 +206,6 @@ class UFL_Solution:
         for j in range(n_cust):
             assigned = np.where(sourcedFrac[j, :] > 0)[0]  # change Correct sourcedFrac indexing for assignment check
 
-            # The assignment check was previously sourcedFrac[:, j], which is transposed relative to how sourcedFrac is used in the rest of the problem (customers are rows, facilities are columns). Correcting this check.
-
             is_assigned_and_open = False  # change Initialize check flag
             if len(assigned) > 0:  # change Check if any facility assigned to customer j
                 # Check if the facility assigned in the subproblem is an open facility
@@ -229,7 +223,7 @@ class UFL_Solution:
                         self.inst.fixed + self.inst.cost[j, :])  # change Correct cost indexing for best facility
                     shouldOpenFac[i_best] = True
                     open_facilities = np.where(shouldOpenFac)[0]
-                    # find the cheapest open facility for customer j
+                # find the cheapest open facility for customer j
                 # cost[customer j, facility set]
                 i_best = open_facilities[
                     np.argmin(self.inst.cost[j, open_facilities])]  # change Correct cost indexing in UB heuristic
@@ -243,15 +237,7 @@ class UFL_Solution:
 
 
 class LagrangianHeuristic:
-    """
-    Class used for the Lagrangian Heuristic
-
-    Attributes
-    ----------
-    instance : UFL_Problem
-        the problem instance
-    """
-
+    # ... (LagrangianHeuristic class unchanged) ...
     def __init__(self, instance):
         self.instance = instance
 
