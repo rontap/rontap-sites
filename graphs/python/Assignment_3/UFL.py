@@ -176,7 +176,16 @@ class UFL_Solution:
             step_size = 0.0  # change Set step_size to zero if LB surpasses UB*
 
         # newlambdas
-        self.lambdas = np.maximum(0, self.lambdas + step_size * subgradient)
+        assignment_sums = np.sum(self.sourcedFrac, axis=1)  # For each customer i: ∑ⱼ xᵢⱼ
+
+        for i in range(self.inst.n_markets):
+            if assignment_sums[i] < 1.0:
+                # Under-assigned: increase λᵢ
+                self.lambdas[i] = max(0, self.lambdas[i] + step_size * subgradient[i])
+            elif assignment_sums[i] > 1.0:
+                # Over-assigned: decrease λᵢ
+                self.lambdas[i] = max(0, self.lambdas[i] + step_size * subgradient[i])
+            # else: assignment_sums[i] == 1.0, keep λᵢ the same
 
         # @comment Debugging print statement to see convergence metrics
         debug_info = f"|--- DEBUG: LB={self.LB:.5f}, UB*={best_UB:.5f}, Gap={stable_gap:.5f}, ||g||^2={norm_g2:.2e}, t^k={step_size:.5e}"  # change Store debug info
