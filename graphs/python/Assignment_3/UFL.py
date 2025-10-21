@@ -4,13 +4,13 @@
 """
 import numpy as np
 
-gALPHA = 1.5
+gALPHA = 0.11
 
 
 class UFL_Problem:
     """
     Class that represent a problem instance of the Uncapcitated Facility Location Problem
-        
+
     Attributes
     ----------
     fixed : numpy array
@@ -61,11 +61,12 @@ class UFL_Problem:
                 if n_line == 0:
                     n_markets = int(asList[0])
                     n_facilities = int(asList[1])
-                    f_j = np.empty(n_markets)
+                    f_j = np.empty(n_facilities)  # change fixed cost array size to n_facilities
                     c_ij = np.empty((n_markets, n_facilities))
                 elif n_line <= n_markets:  # For customers
                     index = n_line - 1
-                    f_j[index] = asList[1]
+                    if index < n_facilities:  # To avoid index error if n_markets > n_facilities
+                        f_j[index] = asList[1]
                 else:
                     if len(asList) == 1:
                         n_row += 1
@@ -92,7 +93,7 @@ class UFL_Problem:
 class UFL_Solution:
     """
     Class that represent a solution to the Uncapcitated Facility Location Problem
-        
+
     Attributes
     ----------
     shouldOpenFac : numpy array
@@ -113,9 +114,13 @@ class UFL_Solution:
         """
         Method that initializes the solution attributes
         """
+        # Reset sourcedFrac for this iteration's subproblem
+        self.sourcedFrac = np.zeros((self.inst.n_markets, self.inst.n_facilities))  # change Reset sourcedFrac
+        self.shouldOpenFac = np.zeros(self.inst.n_facilities)  # change Reset shouldOpenFac
+
         for i in range(self.inst.n_facilities):
             # Reduced cost for assigning customers to facility i
-            reduced_costs = self.inst.cost[i, :] - self.lambdas
+            reduced_costs = self.inst.cost[:, i] - self.lambdas
 
             # Customers whose reduced cost is negative
             neg_customers = reduced_costs < 0
@@ -126,7 +131,7 @@ class UFL_Solution:
             # If opening yields negative total cost (worth it), open it
             if self.inst.fixed[i] + total_gain < 0:
                 self.shouldOpenFac[i] = True
-                self.sourcedFrac[i, neg_customers] = 1.0
+                self.sourcedFrac[neg_customers, i] = 1.0
 
         self.LB = self.getLower()
         self.UB, a, b = self.getUpper()
@@ -134,13 +139,18 @@ class UFL_Solution:
         print(f"Initial Lagrangian Solution: LB = {self.LB}, UB = {self.UB}, Gap = {self.gap}")
 
         # subgradients
-
-        subgradient = 1.0 - np.sum(self.sourcedFrac, axis=0)
+        # The subgradient is indexed by the relaxed constraint (market i)
+        subgradient = 1.0 - np.sum(self.sourcedFrac, axis=1)  # change Correct subgradient axis
         norm_g2 = np.dot(subgradient, subgradient)
         if norm_g2 > 0:
             step_size = gALPHA * self.gap / norm_g2
         else:
             step_size = 0.0
+
+        if self.gap < 0.0:  # change Stabilize step size when LB > UB
+            print("invalid gap size")
+            step_size = 0.0  # change Set step_size to zero to prevent large negative step
+
         # newlambdas
         self.lambdas = np.maximum(0, self.lambdas + step_size * subgradient)
         return self.lambdas, self.shouldOpenFac, self.sourcedFrac
@@ -148,7 +158,7 @@ class UFL_Solution:
     def isFeasible(self):
         """
         Method that checks whether the solution is feasible
-        
+
         Returns true if feasible, false otherwise
         """
         return
@@ -172,7 +182,10 @@ class UFL_Solution:
         sourcedFrac = np.copy(self.sourcedFrac)
         shouldOpenFac = np.copy(self.shouldOpenFac)
         n_fac, n_cust = self.inst.n_facilities, self.inst.n_markets
-
+        print(
+            f"#@comment GetUpper Input: Initial Open Facilities (count): {np.sum(shouldOpenFac)}")  # @comment Debugging: Check input shouldOpenFac
+        print(
+            f"#@comment GetUpper Input: Sourced Frac Max: {np.max(sourcedFrac)}")  # @comment Debugging: Check input sourcedFrac max value
         # Ensure each customer assigned to an open facility
         for j in range(n_cust):
             assigned = np.where(sourcedFrac[:, j] > 0)[0]
@@ -181,22 +194,30 @@ class UFL_Solution:
                 open_facilities = np.where(shouldOpenFac)[0]
                 if len(open_facilities) == 0:
                     # open cheapest facility for this customer
-                    i_best = np.argmin(self.inst.fixed + self.inst.cost[:, j])
+                    # The cost is cost[customer j, facility i]
+                    i_best = np.argmin(
+                        self.inst.fixed + self.inst.cost[j, :])  # change Correct cost indexing for best facility
                     shouldOpenFac[i_best] = True
-                    open_facilities = [i_best]
-                i_best = open_facilities[np.argmin(self.inst.cost[open_facilities, j])]
+                    open_facilities = np.where(shouldOpenFac)[0]
+                    # find the cheapest open facility for customer j
+                # cost[customer j, facility set]
+                i_best = open_facilities[
+                    np.argmin(self.inst.cost[j, open_facilities])]  # change Correct cost indexing in UB heuristic
                 sourcedFrac[:, j] = 0
-                sourcedFrac[i_best, j] = 1.0
+                sourcedFrac[j, i_best] = 1.0  # change Correct assignment: customer j, facility i_best
 
         # Compute feasible cost (upper bound)
         UB = np.sum(self.inst.fixed * shouldOpenFac) + np.sum(self.inst.cost * sourcedFrac)
+        print(
+            f"#@comment GetUpper Output: Final Open Facilities (count): {np.sum(shouldOpenFac)}")  # @comment Debugging: Check output shouldOpenFac
+        print(f"#@comment GetUpper Output: Final UB: {UB}")  # @comment Debugging: Check final UB
         return UB, shouldOpenFac, sourcedFrac
 
 
 class LagrangianHeuristic:
     """
     Class used for the Lagrangian Heuristic
-        
+
     Attributes
     ----------
     instance : UFL_Problem
@@ -208,33 +229,33 @@ class LagrangianHeuristic:
 
     def computeTheta(self, labda):
         """
-        Method that, given an array of Lagrangian multipliers computes and returns 
+        Method that, given an array of Lagrangian multipliers computes and returns
         the optimal value of the Lagrangian problem
         """
         return
 
     def computeLagrangianSolution(self, labda):
         """
-        Method that, given an array of Lagrangian multipliers computes and returns 
+        Method that, given an array of Lagrangian multipliers computes and returns
         the Lagrangian solution (as a UFL_Solution)
         """
         return
 
     def convertToFeasibleSolution(self, lagr_solution):
         """
-        Method that, given the Lagrangian Solution computes and returns 
+        Method that, given the Lagrangian Solution computes and returns
         a feasible solution (as a UFL_Solution)
         """
         return
 
     def updateMultipliers(self, labda_old, lagr_solution):
         """
-        Method that, given the previous Lagrangian multipliers and Lagrangian Solution 
+        Method that, given the previous Lagrangian multipliers and Lagrangian Solution
         updates and returns a new array of Lagrangian multipliers
         """
         return
 
     def runHeuristic(self):
         """
-        Method that performs the Lagrangian Heuristic. 
+        Method that performs the Lagrangian Heuristic.
         """
