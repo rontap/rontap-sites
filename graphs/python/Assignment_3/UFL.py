@@ -11,10 +11,8 @@ gALPHA = .8  # change Using 0.5 as a robust alpha value
 
 
 class UFL_Problem:
-    # ... (UFL_Problem and readInstance methods are unchanged) ...
 
     def __init__(self, f, c, n_markets, n_facilities):
-
         self.fixed = f
         self.cost = c
         self.n_markets = n_markets
@@ -61,48 +59,9 @@ class UFL_Problem:
         return UFL_Problem(f_j, c_ij, n_markets, n_facilities)
 
     def solve(self):
-        global gALPHA
-        initShouldOpenFac = np.zeros(self.n_facilities)
-        initSourcedFrac = np.zeros((self.n_markets, self.n_facilities))
-        lambdas = np.zeros(self.n_markets)
-        solution = UFL_Solution(initShouldOpenFac, initSourcedFrac, self, lambdas)
-        best_UB = np.inf  # change Initialize best upper bound
-
-        # The loop must run once to establish a finite best_UB before that value is used in solve()
-        # We will use a flag to handle the first iteration
-
-        for i in range(250):  # change Loop for 12 iterations
-            if i % 25 == 0 and i > 0:
-                gALPHA = gALPHA / 1.8
-
-                # gALPHA = gALPHA - 0.001
-            # --- Establish Best UB for the FIRST Iteration ONLY ---
-            # If best_UB is still inf, calculate the solution *without* using best_UB for step size
-            # and only calculate a step size of 0.
-
-            # We must run the subproblem first to get a current LB and UB
-            lambdas, shouldOpenFac, sourcedFrac, should_terminate, debug_info = solution.solve(best_UB,
-                                                                                               i == 0)  # change Pass best_UB and is_first_iteration flag
-
-            # Update best UB found so far
-            if solution.UB < best_UB:  # change Track and update the best UB
-                best_UB = solution.UB  # change Store the best UB
-
-            # Print statement must use the best_UB and re-calculate gap
-            current_LB = solution.LB  # change Get current LB
-            current_Gap = best_UB - current_LB  # change Calculate gap against best UB
-
-            # @comment Print debug info first
-            # print(debug_info)
-
-            print(
-                f"{i} Lagrangian Solution: LB = ,{current_LB}, UBbest = ,{best_UB}, UB = ,{solution.UB}, Gap = {current_Gap}")  # change Use tracked best UB for printout
-
-            if should_terminate:  # change Terminate loop if subgradient is near zero
-                print("Fin")
-                return
-
-        print("Fin")
+        # @claude Now calls the LagrangianHeuristic as required by assignment
+        heuristic = LagrangianHeuristic(self)
+        heuristic.runHeuristic()
 
 
 class UFL_Solution:
@@ -110,26 +69,83 @@ class UFL_Solution:
     Class that represent a solution to the Uncapcitated Facility Location Problem
     """
 
-    def __init__(self, shouldOpenFac, sourcedFrac, instance, lambdas):
+    def __init__(self, shouldOpenFac, sourcedFrac, instance):
         self.shouldOpenFac = shouldOpenFac
         self.sourcedFrac = sourcedFrac
         self.inst = instance
-        self.lambdas = lambdas
-        self.LB = -np.inf  # change Initialize LB attribute
-        self.UB = np.inf  # change Initialize UB attribute
 
-    def solve(self, best_UB, is_first_iteration):  # change Accept best_UB and is_first_iteration flag
+    def isFeasible(self):
         """
-        Method that initializes the solution attributes
+        Method that checks whether the solution is feasible
         """
-        # Reset sourcedFrac for this iteration's subproblem
-        self.sourcedFrac = np.zeros((self.inst.n_markets, self.inst.n_facilities))  # change Reset sourcedFrac
-        self.shouldOpenFac = np.zeros(self.inst.n_facilities)  # change Reset shouldOpenFac
-        should_terminate = False  # change Initialize termination flag
+        # @claude Check if each customer is assigned to exactly one facility
+        for i in range(self.inst.n_markets):
+            total_assignment = np.sum(self.sourcedFrac[i, :])
+            # @claude Allow small numerical tolerance
+            if abs(total_assignment - 1.0) > 1e-6:
+                return False
 
-        for i in range(self.inst.n_facilities):
+        # @claude Check if customers are only assigned to open facilities
+        for i in range(self.inst.n_markets):
+            for j in range(self.inst.n_facilities):
+                if self.sourcedFrac[i, j] > 1e-6 and not self.shouldOpenFac[j]:
+                    return False
+
+        return True
+
+    def getCosts(self):
+        """
+        Method that computes and returns the costs of the solution
+        """
+        # @claude Calculate fixed costs for open facilities
+        fixed_costs = np.sum(self.inst.fixed * self.shouldOpenFac)
+
+        # @claude Calculate assignment costs
+        assignment_costs = np.sum(self.inst.cost * self.sourcedFrac)
+
+        return fixed_costs + assignment_costs
+
+
+class LagrangianHeuristic:
+    def __init__(self, instance):
+        self.instance = instance
+
+    def computeTheta(self, labda):
+        """
+        Method that, given an array of Lagrangian multipliers computes and returns
+        the optimal value of the Lagrangian problem
+        """
+        # @claude This is the lower bound calculation from getLower()
+        # @claude We need to compute it for a given lambda and Lagrangian solution
+        # @claude For now, this needs the Lagrangian solution to be computed first
+        # @claude So we compute the solution internally
+        lagr_solution = self.computeLagrangianSolution(labda)
+
+        term1 = np.sum(labda)  # sum over customers
+        term2 = np.sum(self.instance.fixed * lagr_solution.shouldOpenFac)  # change sum(f_j * y_j)
+
+        term3_cost = np.sum(
+            self.instance.cost * lagr_solution.sourcedFrac)  # @comment Sum of assignment costs: sum(c_ij * x_ij)
+
+        term4_lambda_subtracted = np.sum(
+            labda * np.sum(lagr_solution.sourcedFrac, axis=1))  # @comment Term to subtract: sum(lambda_i * sum_j(x_ij))
+
+        # LB = sum(lambda_i) + sum(f_j * y_j) + sum(c_ij * x_ij) - sum(lambda_i * sum_j(x_ij))
+        return term1 + term2 + term3_cost - term4_lambda_subtracted  # @comment Corrected LB calculation to prevent negative values
+
+    def computeLagrangianSolution(self, labda):
+        """
+        Method that, given an array of Lagrangian multipliers computes and returns
+        the Lagrangian solution (as a UFL_Solution)
+        """
+        # @claude Initialize solution arrays
+        shouldOpenFac = np.zeros(self.instance.n_facilities)
+        sourcedFrac = np.zeros((self.instance.n_markets, self.instance.n_facilities))
+
+        # @claude This is the subproblem solving logic from solve()
+        for i in range(self.instance.n_facilities):
             # Reduced cost for assigning customers to facility i
-            reduced_costs = self.inst.cost[:, i] - self.lambdas
+            reduced_costs = self.instance.cost[:, i] - labda
 
             # Customers whose reduced cost is negative
             neg_customers = reduced_costs < 0
@@ -138,96 +154,22 @@ class UFL_Solution:
             total_gain = np.sum(reduced_costs[neg_customers])
 
             # If opening yields negative total cost (worth it), open it
-            if self.inst.fixed[i] + total_gain < 0:
-                self.shouldOpenFac[i] = True
-                self.sourcedFrac[
+            if self.instance.fixed[i] + total_gain < 0:
+                shouldOpenFac[i] = True
+                sourcedFrac[
                     neg_customers, i] = 1.0  # change Correct assignment indexing (already set up this way, but confirming)
 
-        self.LB = self.getLower()  # change Store LB in class attribute
-        self.UB, a, b = self.getUpper()  # change Store UB in class attribute
+        return UFL_Solution(shouldOpenFac, sourcedFrac, self.instance)
 
-        # Calculate stable gap using the BEST UB for the step size (UB* - LB)
-        stable_gap = best_UB - self.LB  # change Calculate stable gap using best_UB
-
-        # subgradients
-        # The subgradient is indexed by the relaxed constraint (market i)
-        subgradient = 1.0 - np.sum(self.sourcedFrac, axis=1)  # change Correct subgradient axis
-        norm_g2 = np.dot(subgradient, subgradient)
-
-        step_size = 0.0  # change Initialize step_size
-
-        # --- Critical Step Size Logic ---
-
-        # 1. Handle Near-Zero Subgradient (Numerical Stability/Convergence)
-        if norm_g2 > np.finfo(float).eps:  # change Use epsilon check for robust division
-            # 2. Handle First Iteration (where best_UB is inf)
-            if is_first_iteration:  # change If it's the first run, the step size must be zero to prevent inf
-                step_size = 0.0
-            else:
-                # 3. Handle Normal Iteration
-                step_size = gALPHA * stable_gap / norm_g2
-        else:
-            # Subgradient is zero -> Convergence
-            step_size = 0.0
-            should_terminate = True  # change Set flag to terminate if subgradient is near zero
-
-        # 4. Handle UB* Surpassed (Standard Subgradient Rule)
-        if stable_gap < 0.0:  # change Use stable_gap to check for surpassing best known UB
-            step_size = 0.0  # change Set step_size to zero if LB surpasses UB*
-
-        # newlambdas
-        assignment_sums = np.sum(self.sourcedFrac, axis=1)  # For each customer i: ∑ⱼ xᵢⱼ
-
-        for i in range(self.inst.n_markets):
-            if assignment_sums[i] < 1.0:
-                # Under-assigned: increase λᵢ
-                self.lambdas[i] = max(0, self.lambdas[i] + step_size * subgradient[i])
-            elif assignment_sums[i] > 1.0:
-                # Over-assigned: decrease λᵢ
-                self.lambdas[i] = max(0, self.lambdas[i] + step_size * subgradient[i])
-            # else: assignment_sums[i] == 1.0, keep λᵢ the same
-
-        # @comment Debugging print statement to see convergence metrics
-        debug_info = f"|--- DEBUG: LB={self.LB:.5f}, UB*={best_UB:.5f}, Gap={stable_gap:.5f}, ||g||^2={norm_g2:.2e}, t^k={step_size:.5e}"  # change Store debug info
-        debug_info = ""
-        return self.lambdas, self.shouldOpenFac, self.sourcedFrac, should_terminate, debug_info  # change Return termination flag and debug info
-
-    def isFeasible(self):
+    def convertToFeasibleSolution(self, lagr_solution):
         """
-        Method that checks whether the solution is feasible
+        Method that, given the Lagrangian Solution computes and returns
+        a feasible solution (as a UFL_Solution)
         """
-        return
-
-    def getCosts(self):
-        """
-        Method that computes and returns the costs of the solution
-        """
-        return
-
-    def getLower(self):
-        """
-        Method that computes and returns the Lagrangian costs of the solution
-        """
-        term1 = np.sum(self.lambdas)  # sum over customers
-        term2 = np.sum(self.inst.fixed * self.shouldOpenFac)  # change sum(f_j * y_j)
-
-        # FIX: The algebraic calculation was causing large negative LB values.
-        # Original: term3 = np.sum((self.inst.cost - self.lambdas) * self.sourcedFrac)
-
-        # Corrected: Split the reduced cost term into two parts to balance the lambda component:
-        term3_cost = np.sum(self.inst.cost * self.sourcedFrac)  # @comment Sum of assignment costs: sum(c_ij * x_ij)
-
-        # The sum of x_ij over j is 1 for an assigned customer i, 0 otherwise.
-        term4_lambda_subtracted = np.sum(
-            self.lambdas * np.sum(self.sourcedFrac, axis=1))  # @comment Term to subtract: sum(lambda_i * sum_j(x_ij))
-
-        # LB = sum(lambda_i) + sum(f_j * y_j) + sum(c_ij * x_ij) - sum(lambda_i * sum_j(x_ij))
-        return term1 + term2 + term3_cost - term4_lambda_subtracted  # @comment Corrected LB calculation to prevent negative values
-
-    def getUpper(self):
-        sourcedFrac = np.copy(self.sourcedFrac)
-        shouldOpenFac = np.copy(self.shouldOpenFac)
-        n_fac, n_cust = self.inst.n_facilities, self.inst.n_markets
+        # @claude This is the repair logic from getUpper()
+        sourcedFrac = np.copy(lagr_solution.sourcedFrac)
+        shouldOpenFac = np.copy(lagr_solution.shouldOpenFac)
+        n_fac, n_cust = self.instance.n_facilities, self.instance.n_markets
 
         # Ensure each customer assigned to an open facility
         for j in range(n_cust):
@@ -247,56 +189,126 @@ class UFL_Solution:
                     # open cheapest facility for this customer
                     # The cost is cost[customer j, facility i]
                     i_best = np.argmin(
-                        self.inst.fixed + self.inst.cost[j, :])  # change Correct cost indexing for best facility
+                        self.instance.fixed + self.instance.cost[
+                            j, :])  # change Correct cost indexing for best facility
                     shouldOpenFac[i_best] = True
                     open_facilities = np.where(shouldOpenFac)[0]
                 # find the cheapest open facility for customer j
                 # cost[customer j, facility set]
                 i_best = open_facilities[
-                    np.argmin(self.inst.cost[j, open_facilities])]  # change Correct cost indexing in UB heuristic
+                    np.argmin(self.instance.cost[j, open_facilities])]  # change Correct cost indexing in UB heuristic
 
                 sourcedFrac[j, :] = 0  # change Zero out row j
                 sourcedFrac[j, i_best] = 1.0  # change Correct assignment: customer j, facility i_best
 
-        # Compute feasible cost (upper bound)
-        UB = np.sum(self.inst.fixed * shouldOpenFac) + np.sum(self.inst.cost * sourcedFrac)
-        return UB, shouldOpenFac, sourcedFrac
-
-
-class LagrangianHeuristic:
-    # ... (LagrangianHeuristic class unchanged) ...
-    def __init__(self, instance):
-        self.instance = instance
-
-    def computeTheta(self, labda):
-        """
-        Method that, given an array of Lagrangian multipliers computes and returns
-        the optimal value of the Lagrangian problem
-        """
-        return
-
-    def computeLagrangianSolution(self, labda):
-        """
-        Method that, given an array of Lagrangian multipliers computes and returns
-        the Lagrangian solution (as a UFL_Solution)
-        """
-        return
-
-    def convertToFeasibleSolution(self, lagr_solution):
-        """
-        Method that, given the Lagrangian Solution computes and returns
-        a feasible solution (as a UFL_Solution)
-        """
-        return
+        return UFL_Solution(shouldOpenFac, sourcedFrac, self.instance)
 
     def updateMultipliers(self, labda_old, lagr_solution):
         """
         Method that, given the previous Lagrangian multipliers and Lagrangian Solution
         updates and returns a new array of Lagrangian multipliers
         """
-        return
+        # @claude This is the lambda update logic from solve()
+        # @claude We need access to best_UB which is tracked in runHeuristic
+        # @claude So we pass it as an attribute
+
+        # Calculate stable gap using the BEST UB for the step size (UB* - LB)
+        stable_gap = self.best_UB - self.current_LB  # change Calculate stable gap using best_UB
+
+        # subgradients
+        # The subgradient is indexed by the relaxed constraint (market i)
+        subgradient = 1.0 - np.sum(lagr_solution.sourcedFrac, axis=1)  # change Correct subgradient axis
+        norm_g2 = np.dot(subgradient, subgradient)
+
+        step_size = 0.0  # change Initialize step_size
+
+        # --- Critical Step Size Logic ---
+
+        # 1. Handle Near-Zero Subgradient (Numerical Stability/Convergence)
+        if norm_g2 > np.finfo(float).eps:  # change Use epsilon check for robust division
+            # 2. Handle First Iteration (where best_UB is inf)
+            if self.is_first_iteration:  # change If it's the first run, the step size must be zero to prevent inf
+                step_size = 0.0
+            else:
+                # 3. Handle Normal Iteration
+                step_size = gALPHA * stable_gap / norm_g2
+        else:
+            # Subgradient is zero -> Convergence
+            step_size = 0.0
+            self.should_terminate = True  # change Set flag to terminate if subgradient is near zero
+
+        # 4. Handle UB* Surpassed (Standard Subgradient Rule)
+        if stable_gap < 0.0:  # change Use stable_gap to check for surpassing best known UB
+            step_size = 0.0  # change Set step_size to zero if LB surpasses UB*
+
+        # newlambdas
+        assignment_sums = np.sum(lagr_solution.sourcedFrac, axis=1)  # For each customer i: ∑ⱼ xᵢⱼ
+        labda_new = np.copy(labda_old)
+
+        for i in range(self.instance.n_markets):
+            if assignment_sums[i] < 1.0:
+                # Under-assigned: increase λᵢ
+                labda_new[i] = max(0, labda_old[i] + step_size * subgradient[i])
+            elif assignment_sums[i] > 1.0:
+                # Over-assigned: decrease λᵢ
+                labda_new[i] = max(0, labda_old[i] + step_size * subgradient[i])
+            # else: assignment_sums[i] == 1.0, keep λᵢ the same
+
+        return labda_new
 
     def runHeuristic(self):
         """
         Method that performs the Lagrangian Heuristic.
         """
+        global gALPHA
+
+        # @claude Initialize multipliers
+        lambdas = np.zeros(self.instance.n_markets)
+        best_UB = np.inf  # change Initialize best upper bound
+
+        # @claude These are used by updateMultipliers
+        self.best_UB = best_UB
+        self.current_LB = -np.inf
+        self.is_first_iteration = True
+        self.should_terminate = False
+
+        for i in range(250):  # change Loop for 250 iterations
+            if i % 25 == 0 and i > 0:
+                gALPHA = gALPHA / 1.8
+
+            # @claude Compute Lagrangian solution (this also computes theta internally)
+            lagr_solution = self.computeLagrangianSolution(lambdas)
+
+            # @claude Compute lower bound
+            LB = self.computeTheta(lambdas)
+            self.current_LB = LB
+
+            # @claude Convert to feasible solution
+            feas_solution = self.convertToFeasibleSolution(lagr_solution)
+
+            # @claude Compute upper bound
+            UB = feas_solution.getCosts()
+
+            # Update best UB found so far
+            if UB < best_UB:  # change Track and update the best UB
+                best_UB = UB  # change Store the best UB
+                self.best_UB = best_UB
+
+            # Print statement must use the best_UB and re-calculate gap
+            current_LB = LB  # change Get current LB
+            current_Gap = best_UB - current_LB  # change Calculate gap against best UB
+
+            print(
+                f"{i} Lagrangian Solution: LB = ,{current_LB}, UBbest = ,{best_UB}, UB = ,{UB}, Gap = {current_Gap}")  # change Use tracked best UB for printout
+
+            # @claude Update multipliers
+            lambdas = self.updateMultipliers(lambdas, lagr_solution)
+
+            # @claude After first iteration, set flag to False
+            self.is_first_iteration = False
+
+            if self.should_terminate:  # change Terminate loop if subgradient is near zero
+                print("Fin")
+                return
+
+        print("Fin")
