@@ -8,6 +8,7 @@ import numpy as np
 from kernprof import no_op
 
 gALPHA = .8  # change Using 0.5 as a robust alpha value
+EPSILON = 0.0001
 
 
 class UFL_Problem:
@@ -213,48 +214,48 @@ class LagrangianHeuristic:
         # @claude So we pass it as an attribute
 
         # Calculate stable gap using the BEST UB for the step size (UB* - LB)
-        stable_gap = self.best_UB - self.current_LB  # change Calculate stable gap using best_UB
+        gap = self.best_UB - self.current_LB  # change Calculate stable gap using best_UB
 
         # subgradients
         # The subgradient is indexed by the relaxed constraint (market i)
         subgradient = 1.0 - np.sum(lagr_solution.sourcedFrac, axis=1)  # change Correct subgradient axis
         norm_g2 = np.dot(subgradient, subgradient)
 
-        step_size = 0.0  # change Initialize step_size
+        stepSize = 0.0  # change Initialize stepSize
 
         # --- Critical Step Size Logic ---
 
         # 1. Handle Near-Zero Subgradient (Numerical Stability/Convergence)
-        if norm_g2 > np.finfo(float).eps:  # change Use epsilon check for robust division
+        if norm_g2 > EPSILON:  # change Use epsilon check for robust division
             # 2. Handle First Iteration (where best_UB is inf)
             if self.is_first_iteration:  # change If it's the first run, the step size must be zero to prevent inf
-                step_size = 0.0
+                stepSize = 0.0
             else:
                 # 3. Handle Normal Iteration
-                step_size = gALPHA * stable_gap / norm_g2
+                stepSize = gALPHA * gap / norm_g2
         else:
             # Subgradient is zero -> Convergence
-            step_size = 0.0
-            self.should_terminate = True  # change Set flag to terminate if subgradient is near zero
+            stepSize = 0.0
+            self.shouldTerminate = True  # change Set flag to terminate if subgradient is near zero
 
         # 4. Handle UB* Surpassed (Standard Subgradient Rule)
-        if stable_gap < 0.0:  # change Use stable_gap to check for surpassing best known UB
-            step_size = 0.0  # change Set step_size to zero if LB surpasses UB*
+        if gap < 0.0:  # change Use gap to check for surpassing best known UB
+            stepSize = 0.0  # change Set stepSize to zero if LB surpasses UB*
 
         # newlambdas
-        assignment_sums = np.sum(lagr_solution.sourcedFrac, axis=1)  # For each customer i: ∑ⱼ xᵢⱼ
-        labda_new = np.copy(labda_old)
+        sums = np.sum(lagr_solution.sourcedFrac, axis=1)  # For each customer i: ∑ⱼ xᵢⱼ
+        lambdaNext = np.copy(labda_old)
 
         for i in range(self.instance.n_markets):
-            if assignment_sums[i] < 1.0:
+            if sums[i] < 1.0:
                 # Under-assigned: increase λᵢ
-                labda_new[i] = max(0, labda_old[i] + step_size * subgradient[i])
-            elif assignment_sums[i] > 1.0:
+                lambdaNext[i] = max(0, labda_old[i] + stepSize * subgradient[i])
+            elif sums[i] > 1.0:
                 # Over-assigned: decrease λᵢ
-                labda_new[i] = max(0, labda_old[i] + step_size * subgradient[i])
-            # else: assignment_sums[i] == 1.0, keep λᵢ the same
+                lambdaNext[i] = max(0, labda_old[i] + stepSize * subgradient[i])
+            # else: sums[i] == 1.0, keep λᵢ the same
 
-        return labda_new
+        return lambdaNext
 
     def runHeuristic(self):
         """
@@ -270,7 +271,7 @@ class LagrangianHeuristic:
         self.best_UB = best_UB
         self.current_LB = -np.inf
         self.is_first_iteration = True
-        self.should_terminate = False
+        self.shouldTerminate = False
 
         for i in range(250):  # change Loop for 250 iterations
             if i % 25 == 0 and i > 0:
@@ -307,7 +308,7 @@ class LagrangianHeuristic:
             # @claude After first iteration, set flag to False
             self.is_first_iteration = False
 
-            if self.should_terminate:  # change Terminate loop if subgradient is near zero
+            if self.shouldTerminate:  # change Terminate loop if subgradient is near zero
                 print("Fin")
                 return
 
