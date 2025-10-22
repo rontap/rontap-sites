@@ -2,13 +2,40 @@
 """
 @author: Original template by Rolf van Lieshout and Krissada Tundulyasaree
 """
-from typing import Any
 
 import numpy as np
-from kernprof import no_op
+import matplotlib.pyplot as plt
 
-gALPHA = .8  # change Using 0.5 as a robust alpha value
-EPSILON = 0.0001
+gALPHA = .6  # change Using 0.5 as a robust alpha value
+EPSILON = 0.000001
+TERMINATION_CRITERION = 100.0  # change Define a termination criterion for convergence
+DAMPENING = 0.8
+
+class Log:
+    def __init__(self):
+        self.UB = []
+        self.LB = []
+        self.bestUB = []
+
+    def add(self, LB, UB, bestUB):
+        self.UB.append(UB)
+        self.LB.append(LB)
+        self.bestUB.append(bestUB)
+
+    def __str__(self):
+        return "f{str(self.UB)},{str(self.LB)},{str(self.bestUB)}"
+
+    def plot(self):
+        x = range(len(self.UB))
+        plt.figure(figsize=(12, 6))
+        plt.plot(x, self.bestUB, color='blue', label='best_UB', linewidth=1.5)
+        plt.plot(x, self.UB, color='red', label='UB', linewidth=1.5)
+        plt.plot(x, self.LB, color='orange', linewidth=0.8)
+        plt.xlim(0, len(self.UB))
+        plt.ylim(0, self.bestUB[0] * 2)
+        plt.legend(loc='upper center', ncol=3, frameon=False)
+        plt.tight_layout()
+        plt.show()
 
 
 class UFL_Problem:
@@ -19,6 +46,8 @@ class UFL_Problem:
         self.n_markets = n_markets
         self.n_facilities = n_facilities
         self.solution = None
+        self.log = Log()
+        self.alpha = gALPHA
 
     def __str__(self):
         return f" Uncapacitated Facility Location Problem: {self.n_markets} markets, {self.n_facilities} facilities"
@@ -82,14 +111,13 @@ class UFL_Solution:
         # @claude Check if each customer is assigned to exactly one facility
         for i in range(self.inst.n_markets):
             total_assignment = np.sum(self.sourcedFrac[i, :])
-            # @claude Allow small numerical tolerance
-            if abs(total_assignment - 1.0) > 1e-6:
+            if abs(total_assignment - 1.0) > EPSILON:
                 return False
 
         # @claude Check if customers are only assigned to open facilities
         for i in range(self.inst.n_markets):
             for j in range(self.inst.n_facilities):
-                if self.sourcedFrac[i, j] > 1e-6 and not self.shouldOpenFac[j]:
+                if self.sourcedFrac[i, j] > EPSILON and not self.shouldOpenFac[j]:
                     return False
 
         return True
@@ -110,6 +138,7 @@ class UFL_Solution:
 class LagrangianHeuristic:
     def __init__(self, instance):
         self.instance = instance
+
 
     def computeTheta(self, labda):
         """
@@ -157,49 +186,39 @@ class LagrangianHeuristic:
             # If opening yields negative total cost (worth it), open it
             if self.instance.fixed[i] + total_gain < 0:
                 shouldOpenFac[i] = True
-                sourcedFrac[
-                    neg_customers, i] = 1.0  # change Correct assignment indexing (already set up this way, but confirming)
+                sourcedFrac[neg_customers, i] = 1.0
 
         return UFL_Solution(shouldOpenFac, sourcedFrac, self.instance)
 
     def convertToFeasibleSolution(self, lagr_solution):
         """
-        Method that, given the Lagrangian Solution computes and returns
-        a feasible solution (as a UFL_Solution)
+        Simplest repair:
+        - Keep opened facilities from Lagrangian solution
+        - Assign EVERY customer to their nearest open facility
+        - If no facilities open, open the one that minimizes total cost
         """
-        # @claude This is the repair logic from getUpper()
-        sourcedFrac = np.copy(lagr_solution.sourcedFrac)
         shouldOpenFac = np.copy(lagr_solution.shouldOpenFac)
-        n_fac, n_cust = self.instance.n_facilities, self.instance.n_markets
+        sourcedFrac = np.zeros((self.instance.n_markets, self.instance.n_facilities))
 
-        # Ensure each customer assigned to an open facility
-        for j in range(n_cust):
-            assigned = np.where(sourcedFrac[j, :] > 0)[0]  # change Correct sourcedFrac indexing for assignment check
+        open_facilities = [j for j in range(self.instance.n_facilities) if shouldOpenFac[j]]
 
-            is_assigned_and_open = False  # change Initialize check flag
-            if len(assigned) > 0:  # change Check if any facility assigned to customer j
-                # Check if the facility assigned in the subproblem is an open facility
-                if np.any(shouldOpenFac[assigned]):  # change Check if any assigned facility is open
-                    is_assigned_and_open = True  # change Set flag if assigned and open
+        # If no facilities are open, open one
+        if len(open_facilities) == 0:
+            # Find facility that minimizes: fixed_cost + total_assignment_cost
+            total_costs = np.zeros(self.instance.n_facilities)
+            for j in range(self.instance.n_facilities):
+                total_costs[j] = self.instance.fixed[j] + np.sum(self.instance.cost[:, j])
 
-            # If not assigned/open, perform repair
-            if not is_assigned_and_open:  # change Use check flag for repair condition
-                # find cheapest open facility
-                open_facilities = LagrangianHeuristic.openFacilities(shouldOpenFac)
-                if len(open_facilities) == 0:
-                    # open cheapest facility for this customer
-                    # The cost is cost[customer j, facility i]
-                    cost = self.instance.fixed + self.instance.cost[j, :]
-                    i_best = np.argmin(cost)  # change Correct cost indexing for best facility
-                    shouldOpenFac[i_best] = True
-                    open_facilities = LagrangianHeuristic.openFacilities(shouldOpenFac)
-                # find the cheapest open facility for customer j
-                # cost[customer j, facility set]
-                i_best = open_facilities[
-                    np.argmin(self.instance.cost[j, open_facilities])]  # change Correct cost indexing in UB heuristic
+            best_j = np.argmin(total_costs)
+            shouldOpenFac[best_j] = True
+            open_facilities = [best_j]
 
-                sourcedFrac[j, :] = 0  # change Zero out row j
-                sourcedFrac[j, i_best] = 1.0  # change Correct assignment: customer j, facility i_best
+        # Assign every customer to nearest open facility
+        for i in range(self.instance.n_markets):
+            costs = self.instance.cost[i, open_facilities]
+            best_idx = np.argmin(costs)
+            best_facility = open_facilities[best_idx]
+            sourcedFrac[i, best_facility] = 1.0
 
         return UFL_Solution(shouldOpenFac, sourcedFrac, self.instance)
 
@@ -231,11 +250,11 @@ class LagrangianHeuristic:
         # 1. Handle Near-Zero Subgradient (Numerical Stability/Convergence)
         if norm_g2 > EPSILON:  # change Use epsilon check for robust division
             # 2. Handle First Iteration (where best_UB is inf)
-            if self.is_first_iteration:  # change If it's the first run, the step size must be zero to prevent inf
+            if self.isFirstIter:  # change If it's the first run, the step size must be zero to prevent inf
                 stepSize = 0.0
             else:
                 # 3. Handle Normal Iteration
-                stepSize = gALPHA * gap / norm_g2
+                stepSize = self.instance.alpha * gap / norm_g2
         else:
             # Subgradient is zero -> Convergence
             stepSize = 0.0
@@ -264,7 +283,6 @@ class LagrangianHeuristic:
         """
         Method that performs the Lagrangian Heuristic.
         """
-        global gALPHA
 
         # @claude Initialize multipliers
         lambdas = np.zeros(self.instance.n_markets)
@@ -273,25 +291,25 @@ class LagrangianHeuristic:
         # @claude These are used by updateMultipliers
         self.best_UB = best_UB
         self.current_LB = -np.inf
-        self.is_first_iteration = True
+        self.isFirstIter = True
         self.shouldTerminate = False
 
         for i in range(250):  # change Loop for 250 iterations
             if i % 25 == 0 and i > 0:
-                gALPHA = gALPHA / 1.8
+                self.instance.alpha = self.instance.alpha * DAMPENING
 
             # @claude Compute Lagrangian solution (this also computes theta internally)
-            lagr_solution = self.computeLagrangianSolution(lambdas)
+            solutionLagrangian = self.computeLagrangianSolution(lambdas)
 
             # @claude Compute lower bound
             LB = self.computeTheta(lambdas)
             self.current_LB = LB
 
             # @claude Convert to feasible solution
-            feas_solution = self.convertToFeasibleSolution(lagr_solution)
+            solutionFeasible = self.convertToFeasibleSolution(solutionLagrangian)
 
             # @claude Compute upper bound
-            UB = feas_solution.getCosts()
+            UB = solutionFeasible.getCosts()
 
             # Update best UB found so far
             if UB < best_UB:  # change Track and update the best UB
@@ -300,19 +318,21 @@ class LagrangianHeuristic:
 
             # Print statement must use the best_UB and re-calculate gap
             current_LB = LB  # change Get current LB
-            current_Gap = best_UB - current_LB  # change Calculate gap against best UB
+            currentGap = best_UB - current_LB  # change Calculate gap against best UB
 
+            self.instance.log.add(LB, UB, best_UB)
             print(
-                f"{i} Lagrangian Solution: LB = ,{current_LB}, UBbest = ,{best_UB}, UB = ,{UB}, Gap = {current_Gap}")  # change Use tracked best UB for printout
+                f"{i} Lagrangian Solution: LB = ,{current_LB:.2f}, UBbest = ,{best_UB:.2f}, UB = ,{UB:.2f}, Gap = {currentGap:.2f}")  # change Use tracked best UB for printout
 
             # @claude Update multipliers
-            lambdas = self.updateMultipliers(lambdas, lagr_solution)
+            lambdas = self.updateMultipliers(lambdas, solutionLagrangian)
 
             # @claude After first iteration, set flag to False
-            self.is_first_iteration = False
+            self.isFirstIter = False
 
-            if self.shouldTerminate:  # change Terminate loop if subgradient is near zero
-                print("Fin")
+            if self.shouldTerminate or abs(
+                    current_LB - best_UB) < TERMINATION_CRITERION:  # change Terminate loop if subgradient is near zero
+                print("Terminating early because of convergence")
                 return
-
+        print(self.instance.log.plot())
         print("Fin")
