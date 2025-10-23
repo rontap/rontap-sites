@@ -8,12 +8,15 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # == CONTROL PARAMETERS ===
-INIT_ALPHA = 0.8  # Initial alpha value for step size calculation
+INIT_ALPHA = 0.9  # Initial alpha value for step size calculation
 EPSILON = 0.000001  # compare small numbers
 TERMINATION_CRITERION = 100.0  # Terminate when UB-LB < this value
 DAMPENING = 0.7  # every N iteration multiply alpha by this
 DAMPENING_ITER = 25  # dampen every N iterations
 ITERS = 200  # total iterations to run
+
+
+# ^^ CONTROL PARAMETERS END
 
 
 class Log:
@@ -95,7 +98,6 @@ class UFL_Problem:
         return UFL_Problem(f_j, c_ij, n_markets, n_facilities)
 
     def solve(self):
-        # @claude Now calls the LagrangianHeuristic as required by assignment
         heuristic = LagrangianHeuristic(self)
         heuristic.runHeuristic()
 
@@ -114,31 +116,23 @@ class UFL_Solution:
         """
         Method that checks whether the solution is feasible
         """
-        # @claude Check if each customer is assigned to exactly one facility
         for i in range(self.inst.n_markets):
             total_assignment = np.sum(self.sourcedFrac[i, :])
             if abs(total_assignment - 1.0) > EPSILON:
                 return False
-
-        # @claude Check if customers are only assigned to open facilities
         for i in range(self.inst.n_markets):
             for j in range(self.inst.n_facilities):
                 if self.sourcedFrac[i, j] > EPSILON and not self.shouldOpenFac[j]:
                     return False
-
         return True
 
     def getCosts(self):
         """
         Method that computes and returns the costs of the solution
         """
-        # @claude Calculate fixed costs for open facilities
-        fixed_costs = np.sum(self.inst.fixed * self.shouldOpenFac)
-
-        # @claude Calculate assignment costs
-        assignment_costs = np.sum(self.inst.cost * self.sourcedFrac)
-
-        return fixed_costs + assignment_costs
+        fixed = np.sum(self.inst.fixed * self.shouldOpenFac)
+        assigned = np.sum(self.inst.cost * self.sourcedFrac)
+        return fixed + assigned
 
 
 class LagrangianHeuristic:
@@ -245,6 +239,7 @@ class LagrangianHeuristic:
         subgradient = 1.0 - np.sum(lagr_solution.sourcedFrac, axis=1)  # change Correct subgradient axis
         norm_g2 = np.dot(subgradient, subgradient)
 
+        stepSize = 0.0
         # 1. Handle Near-Zero Subgradient (Numerical Stability/Convergence)
         if norm_g2 > EPSILON:  # change Use epsilon check for robust division
             # 2. Handle First Iteration (where best_UB is inf)
@@ -253,10 +248,6 @@ class LagrangianHeuristic:
             else:
                 # 3. Handle Normal Iteration
                 stepSize = self.instance.alpha * gap / norm_g2
-        else:
-            # Subgradient is zero -> Convergence
-            stepSize = 0.0
-            self.shouldTerminate = True  # change Set flag to terminate if subgradient is near zero
 
         # 4. Handle UB* Surpassed (Standard Subgradient Rule)
         if gap < 0.0:  # change Use gap to check for surpassing best known UB
@@ -314,7 +305,7 @@ class LagrangianHeuristic:
 
             self.instance.log.add(self.best_LB, UB, self.best_UB)
             print(
-                f"{i} Lagrangian Solution: LB = ,{self.best_LB:.2f}, UBbest = ,{self.best_UB:.2f}, UB = ,{UB:.2f}, Gap = {currentGap:.2f}")  # change Use tracked best UB for printout
+                f"{i} Lagrangian Solution: LB = ,{self.best_LB:.2f}, UBbest = ,{self.best_UB:.2f}, UB = ,{UB:.2f}, Gap = {currentGap:.2f}, BestGap= {bestGap:.2f}")  # change Use tracked best UB for printout
 
             if self.shouldTerminate or bestGap < TERMINATION_CRITERION:
                 print("Terminating early because of convergence")

@@ -57,7 +57,6 @@ function renderCircle(circle,text) {
         }
         
         
-        
         if  ( circle.advancedClicksLeft <= 0 && circle.isAdvanced == 'halfling') {
             circle.isMoving = false;
             circle.isShowing = false;
@@ -199,7 +198,7 @@ function renderUI(filled = false) {
     ctxUI.stroke();
 
    
-    let fillPart = (filled) ? 1000 : Math.random()*1000
+    let fillPart = (filled) ? 1000 : 1000
 
     ctxUI.lineWidth=6
     ctxUI.lineCap="round"

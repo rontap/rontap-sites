@@ -1,6 +1,6 @@
 from UFL import *
 
-file = "MO5"
+file = "MO1"
 u = UFL_Problem.readInstance(file)
 u.solve()
 print('eof')
