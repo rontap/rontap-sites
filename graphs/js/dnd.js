@@ -66,7 +66,7 @@ window[el].ondragstart = function() {
 
 
 //assigning factory
-['sidebarProp','line','action','distance','viewer','textStyle','multiselect','treeObj'].map( (x) => dndFactory(x));
+['sidebarProp','line','action','distance','viewer','textStyle','multiselect','treeObj','props'].map( (x) => dndFactory(x));
 
 
 minimiseFactory =(el) => {
@@ -104,6 +104,7 @@ minimiseFactory('multiselect');
 
 openWindow('treeObj');
 minimiseFactory('treeObj');
-
+openWindow('props')
+// minimiseFactory('props')
 //
 

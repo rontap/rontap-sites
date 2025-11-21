@@ -358,7 +358,15 @@ padding: 13px 10px;
 div#properties {
     height: 234px;
 }
+#props {
+    max-height: 430px;
+    resize:none;
+    width:310px;
+    min-height: 300px;
 
+    height: initial;
+    padding-bottom: 0px;
+}
 #multiselect {
   max-height: 430px;
   resize:none;
@@ -418,13 +426,20 @@ d[dbox] {
 position: absolute;
 }
 #msTypeSelect {
-display: block;
-position: absolute;
-margin-top: -57px;
-margin-left: 64px;
-background: #222;
-width: 145px;
-border: 2px solid #2196F3;
+
+display: block;
+
+position: absolute;
+
+margin-top: -57px;
+
+margin-left: 64px;
+
+background: #222;
+
+width: 145px;
+
+border: 2px solid #2196F3;
 }
 #msbottomfix {
 

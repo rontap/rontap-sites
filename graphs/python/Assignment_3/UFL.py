@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # == CONTROL PARAMETERS ===
-INIT_ALPHA = 0.9  # Initial alpha value for step size calculation
+INIT_ALPHA = 0.8  # Initial alpha value for step size calculation
 EPSILON = 0.000001  # compare small numbers
 TERMINATION_CRITERION = 100.0  # Terminate when UB-LB < this value
 DAMPENING = 0.7  # every N iteration multiply alpha by this
@@ -144,13 +144,12 @@ class LagrangianHeuristic:
         self.shouldTerminate = None
         self.instance = instance
 
-    def computeTheta(self, labda):
+    def computeTheta(self, labda, lagr_solution):
         """
         Method that, given an array of Lagrangian multipliers computes and returns
         the Lagrangian lower bound theta(labda). In the task description, the min(0,XX) is handled
         inside the LagrangianSolution call
         """
-        lagr_solution = self.computeLagrangianSolution(labda)
         # instead of calculating them in a loop, I calculate the terms in blocks decomposing them
         term1 = np.sum(labda)  # sum over customers
         term2 = np.sum(self.instance.fixed * lagr_solution.shouldOpenFac)  # fixed costs f_j*x_j
@@ -187,10 +186,7 @@ class LagrangianHeuristic:
 
     def convertToFeasibleSolution(self, lagr_solution):
         """
-        Simplest repair:
-        - Keep opened facilities from Lagrangian solution
-        - Assign EVERY customer to their nearest open facility
-        - If no facilities open, open the one that minimizes total cost
+        Convert it to a feasible solution by opening facilities and assigning customers
         """
         shouldOpenFac = np.copy(lagr_solution.shouldOpenFac)
         sourcedFrac = np.zeros((self.instance.n_markets, self.instance.n_facilities))
@@ -216,10 +212,13 @@ class LagrangianHeuristic:
             bestFacility = openFacilities[idx]
             sourcedFrac[i, bestFacility] = 1.0
 
-        return UFL_Solution(shouldOpenFac, sourcedFrac, self.instance)
+        newSolution = UFL_Solution(shouldOpenFac, sourcedFrac, self.instance)
+        assert newSolution.isFeasible()  # sanity check
+        return newSolution
 
     @staticmethod
     def openFacilities(shouldOpenFac):
+        # helper method to find opened facilities
         return [j for j, is_open in enumerate(shouldOpenFac) if is_open]
 
     def updateMultipliers(self, lambdaOg, lagr_solution):
@@ -227,45 +226,38 @@ class LagrangianHeuristic:
         Method that, given the previous Lagrangian multipliers and Lagrangian Solution
         updates and returns a new array of Lagrangian multipliers
         """
-        # @claude This is the lambda update logic from solve()
-        # @claude We need access to best_UB which is tracked in runHeuristic
-        # @claude So we pass it as an attribute
-
         # Calculate stable gap using the BEST UB for the step size (UB* - LB)
         gap = self.best_UB - self.current_LB  # change Calculate stable gap using best_UB
 
-        # subgradients
-        # The subgradient is indexed by the relaxed constraint (market i)
-        subgradient = 1.0 - np.sum(lagr_solution.sourcedFrac, axis=1)  # change Correct subgradient axis
+        # subgradients, written with AI support as I couldnt figure out what to do here exactly
+        subgradient = 1.0 - np.sum(lagr_solution.sourcedFrac, axis=1)
         norm_g2 = np.dot(subgradient, subgradient)
+        # ^^ end of AI support
 
         stepSize = 0.0
-        # 1. Handle Near-Zero Subgradient (Numerical Stability/Convergence)
-        if norm_g2 > EPSILON:  # change Use epsilon check for robust division
-            # 2. Handle First Iteration (where best_UB is inf)
-            if self.isFirstIter:  # change If it's the first run, the step size must be zero to prevent inf
+        if norm_g2 > EPSILON:
+
+            if self.isFirstIter:  # first iteration
                 stepSize = 0.0
             else:
-                # 3. Handle Normal Iteration
+                # Idea from assignment: "To ensure convergence, it is advised that the updates
+                # to the multipliers become smaller as the algorithm progresses."
                 stepSize = self.instance.alpha * gap / norm_g2
+        else:
+            print("Subgradient is zero, terminating")
+            self.shouldTerminate = True
 
-        # 4. Handle UB* Surpassed (Standard Subgradient Rule)
-        if gap < 0.0:  # change Use gap to check for surpassing best known UB
-            stepSize = 0.0  # change Set stepSize to zero if LB surpasses UB*
-
-        # newlambdas
-        sums = np.sum(lagr_solution.sourcedFrac, axis=1)  # For each customer i: ∑ⱼ xᵢⱼ
+        # get new lambdas
+        sums = np.sum(lagr_solution.sourcedFrac, axis=1)  # For each customer add the fractions together
         lambdaNext = np.copy(lambdaOg)
-        # Idea from assignment: "To ensure convergence, it is advised that the updates
-        # to the multipliers become smaller as the algorithm progresses."
-        finalStepSize = stepSize * self.instance.alpha ** 2
+
         for i in range(self.instance.n_markets):
             if sums[i] < 1.0:
                 # Under-assigned: increase λ
-                lambdaNext[i] = max(0, lambdaOg[i] + finalStepSize * subgradient[i])
+                lambdaNext[i] = max(0, lambdaOg[i] + stepSize * subgradient[i])
             elif sums[i] > 1.0:
                 # Over-assigned: decrease λ
-                lambdaNext[i] = max(0, lambdaOg[i] + finalStepSize * subgradient[i])
+                lambdaNext[i] = max(0, lambdaOg[i] + stepSize * subgradient[i])
             # else: keep λ the same
 
         return lambdaNext
@@ -279,7 +271,7 @@ class LagrangianHeuristic:
         self.current_LB = -np.inf
         self.best_LB = -np.inf
         self.isFirstIter = True
-        self.shouldTerminate = False  # should the algorithm terminate early (convergence)
+        self.shouldTerminate = False  # should the algorithm terminate early?
 
         # === MAIN ITERATION ====
         for i in range(ITERS):
@@ -289,7 +281,7 @@ class LagrangianHeuristic:
             solutionLagrangian = self.computeLagrangianSolution(lambdas)
             solutionFeasible = self.convertToFeasibleSolution(solutionLagrangian)
 
-            LB = self.computeTheta(lambdas)
+            LB = self.computeTheta(lambdas, solutionLagrangian)
             UB = solutionFeasible.getCosts()
             self.current_LB = LB
 

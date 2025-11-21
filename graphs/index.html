@@ -75,7 +75,7 @@
         $_GET("solution")
     }
 
-    const FORCE_LSA = true;
+    const FORCE_LSOTM_SETTINGS = false;
     window.LSA_xdiff = [];
 
     function partial_succ_prev(arr, arrb, index) {
@@ -152,6 +152,64 @@
         return mx[0].map((_, colIndex) => mx.map(row => row[colIndex]));
     }
 
+    Tfrom = [
+        0,
+        912,
+        825,
+        65,
+        727,
+        15,
+        621,
+        170,
+        255,
+        534,
+        357,
+        448,
+        652,
+        30,
+        567,
+        384,
+        475,
+        99,
+        179,
+        278,
+        10,
+        914,
+        812,
+        732,
+        65,
+        169
+    ]
+
+    Tto = [
+        200000,
+        967,
+        870,
+        146,
+        782,
+        67,
+        702,
+        225,
+        324,
+        605,
+        410,
+        505,
+        721,
+        92,
+        620,
+        429,
+        528,
+        148,
+        254,
+        345,
+        73,
+        965,
+        883,
+        777,
+        144,
+        224
+    ]
+
     function load_tue() {
         const v = tue_val.value;
         const vv = tue_graph.value;
@@ -175,10 +233,56 @@
         render(null, {which: 3});
         console.log(parsed, route)
     }
+
+    const nodes = [[40.0, 50.0], [45.0, 68.0], [45.0, 70.0], [42.0, 66.0], [42.0, 68.0], [42.0, 65.0], [40.0, 69.0], [40.0, 66.0], [38.0, 68.0], [38.0, 70.0], [35.0, 66.0], [35.0, 69.0], [25.0, 85.0], [22.0, 75.0], [22.0, 85.0], [20.0, 80.0], [20.0, 85.0], [18.0, 75.0], [15.0, 75.0], [15.0, 80.0], [30.0, 50.0], [30.0, 52.0], [28.0, 52.0], [28.0, 55.0], [25.0, 50.0], [25.0, 52.0],]
+
+    const mult = 28
+
+    function decision_making_class_draw_output() {
+        try {
+            graph.nodes = new Map();
+            const input = JSON.parse(final_routing.value);
+            const route = input.es.replace(/[^0-9,\.]/g, '').split(",").map(Number)
+            const Ts = input.Ts.replace(/[^0-9,\.]/g, '').split(",").map(Number).map(Math.round)
+            const us = input.us.replace(/[^0-9,\.]/g, '').split(",").map(Number).map(Math.round)
+            console.log(Ts, us)
+            nodes.forEach((node, i) => {
+
+                console.log(Tfrom[i])
+                text = Ts[i * 2 + 1] ? ("T[" + Tfrom[i] + "," + Ts[i * 2 + 1] + "," + Tto[i] + "]") : ""
+                console.log(text)
+                const nd = new Node(i, {
+                    y: Number(node[0]) * mult - mult * 12,
+                    x: Number(node[1]) * mult - mult * 45,
+                    weight: (0 + Ts[i * 2 + 1]) / 1000 + 10,
+                    text: (text + (us[i * 2 + 1] ? (" us(" + us[i * 2 + 1]) + ")" : "") + " #" + i + ""),
+                    props: [
+                        ["Ts [start,actual,end]", text],
+                        ["us", us[i * 2 + 1]],
+
+                    ]
+                }, undefined, {Type: ""});
+                graph.addNode(nd)
+            })
+
+            for (let i = 0; i < route.length; i += 3) {
+                console.log(route[i], route[i + 1], route[i + 2])
+                if ((route[i + 2])) {
+                    graph.nodes.get(route[i])?.edges?.set(route[i + 1], "COLOR:2")
+                }
+
+            }
+        } catch (e) {
+            console.error(e)
+            alert("Unsuccesful drawing. See console for details");
+        }
+    }
 </script>
 <div id="tue">
-    GRAPH DISPLAY<br/>
-    <textarea id="tue_val" placeholder="values">
+    RESULT DISPLAY<br/>
+    <textarea id="final_routing"></textarea>
+
+    <textarea id="tue_val" style="display:none" placeholder="values">
         StringID     Type         x            y            demand       ReadyTime    DueDate      ServiceTime  PartnerID
 D0           d            35.0         35.0         0.0          0.0          230.0        0.0          0
 S0           f            35.0         35.0         0.0          0.0          230.0        0.0          0
@@ -309,10 +413,11 @@ C104         cd           13.0         52.0         -36.0        65.0         19
 C105         cd           45.0         65.0         -9.0         79.0         182.0        10.0         C20
 C106         cd           55.0         54.0         -26.0        57.0         140.0        10.0         C81
     </textarea>
-    <textarea id="tue_graph" placeholder="graph">['D0,C29,C3,D0,', 'D0,C6,C83,C75,C67,D0,', 'D0,C40,C26,C7,C47,D0,', 'D0,C2,C22,C10,C70,D0,', 'D0,C53,C76,C34,C55,C39,C4,D0,', 'D0,C95,C59,C99,C89,C62,C11,D0,', 'D0,C45,C60,C98,C57,D0,', 'D0,C16,C96,C74,C101,D0,', 'D0,C41,C23,C15,C43,C42,C97,D0,', 'D0,C9,C50,D0,', 'D0,C30,C51,C20,C105,C33,C68,C80,C103,C25,C54,D0,', 'D0,C82,C18,C17,C8,C64,C32,D0,', 'D0,C5,C85,C92,C87,C14,C91,C38,C93,D0,', 'D0,C73,C21,C12,C28,C24,C78,D0,', 'D0,C27,C31,C88,C48,C104,C46,D0,', 'D0,C19,C36,C49,C63,C13,C58,D0,', 'D0,C61,C86,C44,C100,C102,C37,C72,C56,D0,', 'D0,C52,C90,C69,C94,C84,C77,D0,', 'D0,C79,C81,C106,C35,C71,C65,C66,C1,D0,']
+    <textarea id="tue_graph" style="display:none" placeholder="graph">['D0,C29,C3,D0,', 'D0,C6,C83,C75,C67,D0,', 'D0,C40,C26,C7,C47,D0,', 'D0,C2,C22,C10,C70,D0,', 'D0,C53,C76,C34,C55,C39,C4,D0,', 'D0,C95,C59,C99,C89,C62,C11,D0,', 'D0,C45,C60,C98,C57,D0,', 'D0,C16,C96,C74,C101,D0,', 'D0,C41,C23,C15,C43,C42,C97,D0,', 'D0,C9,C50,D0,', 'D0,C30,C51,C20,C105,C33,C68,C80,C103,C25,C54,D0,', 'D0,C82,C18,C17,C8,C64,C32,D0,', 'D0,C5,C85,C92,C87,C14,C91,C38,C93,D0,', 'D0,C73,C21,C12,C28,C24,C78,D0,', 'D0,C27,C31,C88,C48,C104,C46,D0,', 'D0,C19,C36,C49,C63,C13,C58,D0,', 'D0,C61,C86,C44,C100,C102,C37,C72,C56,D0,', 'D0,C52,C90,C69,C94,C84,C77,D0,', 'D0,C79,C81,C106,C35,C71,C65,C66,C1,D0,']
 
 </textarea>
-    <button onclick="load_tue()">do stuff</button>
+    <!--    <button onclick="load_tue()">do stuff</button>-->
+    <button onclick="decision_making_class_draw_output()">do stuff</button>
 </div>
 
 <holder>
@@ -587,7 +692,13 @@ C106         cd           55.0         54.0         -26.0        57.0         14
 
   </div>
 </div-->
-
+<div module="sidebar" id="props" style="width:350px;" onclick="this.classList.add('open','on')">
+    <h2 id="propsDrag">Properties</h2>
+    <i class="material-icons" style="margin-left:320px" dragger>drag_indicator</i>
+    <div id="props_info">
+        Select a node to show it's properties
+    </div>
+</div>
 
 <div module="sidebar" id="distance" style="width:350px;" onclick="this.classList.add('open','on')">
     <h2 id="distanceDrag">Measure Distance</h2>
@@ -742,18 +853,18 @@ C106         cd           55.0         54.0         -26.0        57.0         14
     <div id="shortcutHelp">Click to add a new Node</div>
 </footer>
 
-<span id="clippyHolder">
-<img src="resources/clippy.png" id="clippy">
-<div id="clippyHelp">
-  It looks like you're trying to<br>
-  Create a New Graph. Let me help you!<br>
-  <button>Click anywhere to create a new node</button>
-  <button>Connect to nodes to create an edge</button>
-  <button>Try using ALT/DEL to move and delete edges</button>
-  <button>Keep in mind that this is a homemade proof-of-concept</button>
-  <button onclick="clippyHolder.innerHTML=''">Close Clippy :(</button>
-</div>
-</span>
+<!--<span id="clippyHolder">-->
+<!--<img src="resources/clippy.png" id="clippy">-->
+<!--<div id="clippyHelp">-->
+<!--  It looks like you're trying to<br>-->
+<!--  Create a New Graph. Let me help you!<br>-->
+<!--  <button>Click anywhere to create a new node</button>-->
+<!--  <button>Connect to nodes to create an edge</button>-->
+<!--  <button>Try using ALT/DEL to move and delete edges</button>-->
+<!--  <button>Keep in mind that this is a homemade proof-of-concept</button>-->
+<!--  <button onclick="clippyHolder.innerHTML=''">Close Clippy :(</button>-->
+<!--</div>-->
+<!--</span>-->
 </BODY>
 <script src="../NXTJS/material-colors.js"></script>
 

@@ -72,7 +72,7 @@ function render(type, e) {//main rendering funcion
         should.nodes = true;
     }
 
-
+    setProps(lastClickedElement);
     ctx.clearAll();
     //rendering everything out
     if (clickArea.type == 'Node' && type == 'up' && drawingLine && MODE == "Place") {
@@ -128,13 +128,13 @@ function render(type, e) {//main rendering funcion
     graph.nodes.forEach((val, key) => {
 
         ctx.beginPath();
-        ctx.lineWidth = 1;
-
-        ctx.strokeStyle = "black";
+        // ctx.lineWidth = 1;
+        //
+        // ctx.strokeStyle = "black";
         //NODE COLOR THINGS
         mainColor = renderSelectedColor(val);
 
-        if (FORCE_LSA) {
+        if (FORCE_LSOTM_SETTINGS) {
             mainColor = LSA_xdiff[val.id]
         } else if (val.id === 0) { // highlight node
             ctx.lineWidth = 6;
@@ -162,7 +162,7 @@ function render(type, e) {//main rendering funcion
             ctx.lineWidth = 1;
         }
 
-        if (val._rest.Type) {
+        if (val?._rest?.Type) {
             if (val._rest.Type === "cd") {
                 ctx.fillStyle = MAT_COLORS['green-500'];
 
