@@ -245,7 +245,8 @@
             const route = input.es.replace(/[^0-9,\.]/g, '').split(",").map(Number)
             const Ts = input.Ts.replace(/[^0-9,\.]/g, '').split(",").map(Number).map(Math.round)
             const us = input.us.replace(/[^0-9,\.]/g, '').split(",").map(Number).map(Math.round)
-            console.log(Ts, us)
+            const ws = input.ws.replace(/[^0-9,\.]/g, '').split(",").map(Number).map(Math.round)
+            console.log(Ts, us,ws)
             nodes.forEach((node, i) => {
 
                 console.log(Tfrom[i])
@@ -259,6 +260,7 @@
                     props: [
                         ["Ts [start,actual,end]", text],
                         ["us", us[i * 2 + 1]],
+                        ["ws", ws[i * 2 + 1]],
 
                     ]
                 }, undefined, {Type: ""});

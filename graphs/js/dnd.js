@@ -92,7 +92,7 @@ closeWindow = (el) => {
     $('#'+el).classList.remove('on','open');
 }
 
-
+openWindow('distance');
 openWindow('viewer');
 minimiseFactory('viewer');
 openWindow('textStyle');
